@@ -16,7 +16,7 @@ public class Main {
             System.out.println("=== TKU-SP: Top-K Utility Sequential Pattern Mining ===\n");
 
             // 1. Lire le dataset
-            String inputPath = "data/SIGN_sequence_utility.txt";
+            String inputPath = "data/kosarak10k_sequence_utility.txt";
             System.out.println("Reading dataset from: " + inputPath);
             Dataset dataset = DatasetReader.readDataset(inputPath);
             System.out.println("Dataset loaded: " + dataset);
@@ -48,7 +48,7 @@ public class Main {
             }
 
             // 5. Sauvegarder les résultats
-            String outputPath = "output/topk_results.txt";
+            String outputPath = "output/topk_results_kosarak10k.txt";
             OutputWriter.writeResults(
                     topK,
                     outputPath,

@@ -98,7 +98,7 @@ public class TKUSP implements Algorithm {
 
         System.out.println("\n=== Algorithm Completed ===");
         System.out.printf("Total iterations: %d\n", iteration - 1);
-        System.out.printf("Runtime: %d ms\n", this.runtime);
+        System.out.printf("Runtime: %.2f s\n", this.runtime/1000.0);
         System.out.printf("Memory: %.2f MB\n", this.memoryUsage);
         cache.printStatistics();
 
