@@ -1,5 +1,6 @@
 package utils;
 
+import model.Dataset;
 import model.Sequence;
 
 import java.util.HashMap;
@@ -16,7 +17,7 @@ public class UtilityCache {
         this.misses = 0;
     }
 
-    public int getUtility(Sequence sequence) {
+    public int getUtility(Sequence sequence, Dataset dataset) {
         String signature = sequence.getSignature();
 
         if (cache.containsKey(signature)) {
@@ -25,7 +26,7 @@ public class UtilityCache {
         }
 
         misses++;
-        int utility = sequence.getUtility();
+        int utility = UtilityCalculator.calculateSequenceUtility(sequence, dataset);
         cache.put(signature, utility);
         return utility;
     }

@@ -2,7 +2,12 @@ package model;
 
 public class Item {
     private final int id;
-    private final int utility;
+    private int utility; // Plus final car calculé après
+
+    public Item(int id) {
+        this.id = id;
+        this.utility = 0;
+    }
 
     public Item(int id, int utility) {
         this.id = id;
@@ -15,6 +20,10 @@ public class Item {
 
     public int getUtility() {
         return utility;
+    }
+
+    public void setUtility(int utility) {
+        this.utility = utility;
     }
 
     @Override
@@ -32,6 +41,6 @@ public class Item {
 
     @Override
     public String toString() {
-        return id + "[" + utility + "]";
+        return utility > 0 ? id + "[" + utility + "]" : String.valueOf(id);
     }
 }

@@ -46,6 +46,10 @@ public class Sequence {
         return cachedUtility;
     }
 
+    public void setUtility(int utility) {
+        this.cachedUtility = utility;
+    }
+
     @Override
     public String toString() {
         return itemsets.stream()

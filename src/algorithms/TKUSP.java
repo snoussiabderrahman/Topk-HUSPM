@@ -4,7 +4,9 @@ import config.AlgorithmConfig;
 import model.*;
 import utils.DatasetStatistics;
 import utils.UtilityCache;
+import utils.UtilityCalculator;
 
+import java.io.PrintStream;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -51,7 +53,7 @@ public class TKUSP implements Algorithm {
         System.out.println(config);
         System.out.println("Items: " + items);
 
-        while (iteration <= config.getMaxIterations() && !isBinaryMatrix(PM)) {
+        while (iteration != config.getMaxIterations() && !isBinaryMatrix(PM)) {
             System.out.printf("\n--- Iteration %d ---\n", iteration);
 
             // Générer l'échantillon
@@ -65,8 +67,8 @@ public class TKUSP implements Algorithm {
 
             // Calculer les utilités (avec cache)
             for (Sequence seq : sample) {
-                cache.getUtility(seq);
-                //System.out.printf("\nsequence : %s",seq.toString());
+                int utility = UtilityCalculator.calculateSequenceUtility(seq, dataset);
+                seq.setUtility(utility); // Il faut ajouter un setter dans Sequence
             }
 
 
@@ -162,18 +164,15 @@ public class TKUSP implements Algorithm {
         for (int itemIdx = 0; itemIdx < items.size(); itemIdx++) {
             if (random.nextDouble() < PM[itemIdx][position]) {
                 int itemId = items.get(itemIdx);
-                // Générer une utilité aléatoire (simplifié ici)
-                int utility = 1 + random.nextInt(50);
-                chosenItems.add(new Item(itemId, utility));
+                // NE PLUS GÉNÉRER D'UTILITÉ ALÉATOIRE
+                chosenItems.add(new Item(itemId)); // Utilité = 0 par défaut
             }
         }
 
         // Limiter la taille selon la distribution empirique
         if (!chosenItems.isEmpty()) {
             int maxElemSize = stats.sampleItemsetSize(random);
-
             if (chosenItems.size() > maxElemSize) {
-                // Réduire aléatoirement
                 Collections.shuffle(chosenItems, random);
                 chosenItems = chosenItems.subList(0, maxElemSize);
             }
@@ -188,33 +187,27 @@ public class TKUSP implements Algorithm {
     }
 
     private Item fallbackItem(double[][] PM, List<Integer> items, int position) {
-        // Normaliser les probabilités pour cette position
         double sum = 0.0;
         for (int i = 0; i < items.size(); i++) {
             sum += PM[i][position];
         }
 
         if (sum == 0.0) {
-            // Choisir un item au hasard
             int itemId = items.get(random.nextInt(items.size()));
-            return new Item(itemId, 1 + random.nextInt(50));
+            return new Item(itemId); // Sans utilité aléatoire
         }
 
-        // Tirer proportionnellement aux probabilités
         double r = random.nextDouble() * sum;
         double cumulative = 0.0;
 
         for (int i = 0; i < items.size(); i++) {
             cumulative += PM[i][position];
             if (cumulative >= r) {
-                int itemId = items.get(i);
-                return new Item(itemId, 1 + random.nextInt(50));
+                return new Item(items.get(i)); // Sans utilité aléatoire
             }
         }
 
-        // Par défaut
-        int itemId = items.get(0);
-        return new Item(itemId, 1 + random.nextInt(50));
+        return new Item(items.get(0)); // Sans utilité aléatoire
     }
 
     private List<Sequence> updateTopK(List<Sequence> currentTopK,
