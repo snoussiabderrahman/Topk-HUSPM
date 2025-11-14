@@ -1,146 +1,93 @@
 package utils;
 
 import model.*;
-import java.util.*;
+import java.util.BitSet;
 
+/**
+ * Calculateur d'utilité ULTRA-OPTIMISÉ pour HUSPM
+ *
+ * AMÉLIORATIONS PAR RAPPORT À LA VERSION PRÉCÉDENTE :
+ * 1. Utilise OptimizedDataStructures pour éviter de parcourir tout le dataset
+ * 2. Utilise FastSequenceMatcher pour un matching rapide
+ * 3. Cache les résultats avec signature structurelle
+ * 4. Élagage précoce avec SWU
+ *
+ * COMPLEXITÉ :
+ * - Avant : O(|dataset| × complexité_matching)
+ * - Maintenant : O(|candidates| × complexité_matching)
+ *   où |candidates| << |dataset| grâce aux BitSets
+ */
 public class UtilityCalculator {
 
     /**
-     * Calcule l'utilité d'une séquence générée selon la Définition 5 du papier
-     * u(t) = Σ u(t → s) pour toutes les séquences s du dataset
-     * où u(t → s) = max{u(matching_i)} pour tous les matchings de t dans s
+     * Cache des utilités calculées
      */
-    public static int calculateSequenceUtility(Sequence generated, Dataset dataset) {
-        int totalUtility = 0;
+    private static final UtilityCache cache = new UtilityCache();
 
-        // Pour chaque séquence quantifiée dans le dataset
-        for (Sequence dataSeq : dataset.getSequences()) {
-            // Trouver le maximum des utilités de tous les matchings
-            int maxUtility = findMaxMatchingUtility(generated, dataSeq);
-            totalUtility += maxUtility;
+    /**
+     * Calcule l'utilité d'une séquence générée selon la Définition 5
+     *
+     * ALGORITHME OPTIMISÉ :
+     * 1. Extraire les items de la séquence générée
+     * 2. Utiliser l'index inversé (BitSet) pour trouver les q-sequences candidates
+     * 3. Pour chaque q-sequence candidate, calculer Sequential Maximal Utility
+     * 4. Sommer tous les maximums
+     *
+     * @param generated la séquence générée
+     * @param dataStructures les structures optimisées
+     * @return l'utilité totale
+     */
+    public static long calculateSequenceUtility(
+            Sequence generated,
+            OptimizedDataStructures dataStructures) {
+
+        // Vérifier le cache
+        String signature = generated.getSignature();
+        Integer cachedUtility = cache.get(signature);
+        if (cachedUtility != null) {
+            return cachedUtility;
         }
+
+        // Étape 1 : Trouver les q-sequences candidates avec BitSet
+        BitSet candidateBitSet = dataStructures.findCandidateSequences(generated);
+
+        if (candidateBitSet.isEmpty()) {
+            cache.put(signature, 0);
+            return 0;
+        }
+
+        // Étape 2 : Pour chaque q-sequence candidate, calculer max utility
+        long totalUtility = getTotalUtility(generated, dataStructures, candidateBitSet);
+
+        // Mettre en cache
+        cache.put(signature, (int) totalUtility);
 
         return totalUtility;
     }
 
-    /**
-     * Trouve le maximum des utilités de tous les matchings de 'pattern' dans 'sequence'
-     */
-    private static int findMaxMatchingUtility(Sequence pattern, Sequence sequence) {
-        List<List<Integer>> allMatchings = findAllMatchings(pattern, sequence);
+    private static long getTotalUtility(Sequence generated, OptimizedDataStructures dataStructures, BitSet candidateBitSet) {
 
-        if (allMatchings.isEmpty()) {
-            return 0;
+        long totalUtility = 0;
+
+        for (int seqIdx = candidateBitSet.nextSetBit(0);
+             seqIdx >= 0;
+             seqIdx = candidateBitSet.nextSetBit(seqIdx + 1)) {
+
+            Sequence qseq = dataStructures.getSequence(seqIdx);
+
+            // Calculer Sequential Maximal Utility pour cette q-sequence
+            long maxUtility = FastSequenceMatcher.findMaximalUtility(generated, qseq);
+
+            totalUtility += maxUtility;
         }
-
-        int maxUtility = 0;
-        for (List<Integer> matching : allMatchings) {
-            int utility = calculateMatchingUtility(pattern, sequence, matching);
-            maxUtility = Math.max(maxUtility, utility);
-        }
-
-        return maxUtility;
+        return totalUtility;
     }
 
     /**
-     * Trouve tous les matchings possibles de 'pattern' dans 'sequence'
-     * Retourne une liste de listes d'indices (positions dans sequence)
+     * Réinitialise le cache
      */
-    private static List<List<Integer>> findAllMatchings(Sequence pattern, Sequence sequence) {
-        List<List<Integer>> allMatchings = new ArrayList<>();
-
-        if (pattern.isEmpty() || sequence.isEmpty() || pattern.length() > sequence.length()) {
-            return allMatchings;
-        }
-
-        // Backtracking pour trouver tous les matchings
-        findMatchingsRecursive(pattern, sequence, 0, 0, new ArrayList<>(), allMatchings);
-
-        return allMatchings;
+    public static void clearCache() {
+        cache.clear();
     }
 
-    /**
-     * Recherche récursive de tous les matchings
-     */
-    private static void findMatchingsRecursive(
-            Sequence pattern,
-            Sequence sequence,
-            int patternIdx,
-            int sequenceIdx,
-            List<Integer> currentMatching,
-            List<List<Integer>> allMatchings) {
-
-        // Si on a matché tout le pattern
-        if (patternIdx == pattern.length()) {
-            allMatchings.add(new ArrayList<>(currentMatching));
-            return;
-        }
-
-        // Si on a dépassé la séquence
-        if (sequenceIdx >= sequence.length()) {
-            return;
-        }
-
-        Itemset patternItemset = pattern.getItemsets().get(patternIdx);
-
-        // Essayer de matcher à partir de chaque position restante
-        for (int i = sequenceIdx; i < sequence.length(); i++) {
-            Itemset seqItemset = sequence.getItemsets().get(i);
-
-            // Vérifier si patternItemset est contenu dans seqItemset
-            if (isSubset(patternItemset, seqItemset)) {
-                currentMatching.add(i);
-                findMatchingsRecursive(pattern, sequence, patternIdx + 1, i + 1,
-                        currentMatching, allMatchings);
-                currentMatching.remove(currentMatching.size() - 1);
-            }
-        }
-    }
-
-    /**
-     * Vérifie si tous les items de 'subset' sont dans 'superset'
-     */
-    private static boolean isSubset(Itemset subset, Itemset superset) {
-        Set<Integer> superIds = new HashSet<>();
-        for (Item item : superset.getItems()) {
-            superIds.add(item.getId());
-        }
-
-        for (Item item : subset.getItems()) {
-            if (!superIds.contains(item.getId())) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Calcule l'utilité d'un matching spécifique
-     */
-    private static int calculateMatchingUtility(
-            Sequence pattern,
-            Sequence sequence,
-            List<Integer> matching) {
-
-        int utility = 0;
-
-        for (int i = 0; i < pattern.length(); i++) {
-            Itemset patternItemset = pattern.getItemsets().get(i);
-            int seqIdx = matching.get(i);
-            Itemset seqItemset = sequence.getItemsets().get(seqIdx);
-
-            // Pour chaque item du pattern, trouver son utilité dans la séquence
-            for (Item patternItem : patternItemset.getItems()) {
-                for (Item seqItem : seqItemset.getItems()) {
-                    if (patternItem.getId() == seqItem.getId()) {
-                        utility += seqItem.getUtility();
-                        break;
-                    }
-                }
-            }
-        }
-
-        return utility;
-    }
 }

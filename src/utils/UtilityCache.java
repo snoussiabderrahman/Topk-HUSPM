@@ -1,11 +1,18 @@
 package utils;
 
-import model.Dataset;
 import model.Sequence;
 
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * UtilityCache : cache simple pour utilités de séquences.
+ * Fournit :
+ *  - Integer get(String signature)   // retourne null si absent
+ *  - void put(String signature, int value)
+ *  - int getUtility(Sequence sequence) // ancienne API compatible
+ *  - void clear(), printStatistics(), getHitRate()
+ */
 public class UtilityCache {
     private final Map<String, Integer> cache;
     private int hits;
@@ -17,18 +24,25 @@ public class UtilityCache {
         this.misses = 0;
     }
 
-    public int getUtility(Sequence sequence, Dataset dataset) {
-        String signature = sequence.getSignature();
-
-        if (cache.containsKey(signature)) {
+    /**
+     * Récupère la valeur en cache par clé (signature).
+     * Retourne null si absent.
+     */
+    public Integer get(String signature) {
+        Integer v = cache.get(signature);
+        if (v != null) {
             hits++;
-            return cache.get(signature);
+        } else {
+            misses++;
         }
+        return v;
+    }
 
-        misses++;
-        int utility = UtilityCalculator.calculateSequenceUtility(sequence, dataset);
-        cache.put(signature, utility);
-        return utility;
+    /**
+     * Stocke une valeur dans le cache.
+     */
+    public void put(String signature, int value) {
+        cache.put(signature, value);
     }
 
     public void clear() {

@@ -1,6 +1,7 @@
 package model;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -20,7 +21,7 @@ public class Itemset {
     }
 
     public List<Item> getItems() {
-        return new ArrayList<>(items);
+        return  Collections.unmodifiableList(items);
     }
 
     public int size() {

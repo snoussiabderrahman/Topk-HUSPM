@@ -3,10 +3,11 @@ package algorithms;
 import config.AlgorithmConfig;
 import model.*;
 import utils.DatasetStatistics;
+import utils.OptimizedDataStructures;
 import utils.UtilityCache;
 import utils.UtilityCalculator;
 
-import java.io.PrintStream;
+
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -33,27 +34,66 @@ public class TKUSP implements Algorithm {
         runtime.gc();
         long memoryBefore = runtime.totalMemory() - runtime.freeMemory();
 
-        // Obtenir les statistiques du dataset
+        System.out.println("\n=== Starting TKU-SP Algorithm ===");
+        System.out.println(config);
+
+        // 1) Statistiques dataset
         DatasetStatistics stats = new DatasetStatistics(dataset);
         stats.printStatistics();
 
-        List<Integer> items = new ArrayList<>(stats.getDistinctItems());
-        Collections.sort(items);
+        // 2) INITIALISER dataStructures AVANT toute utilisation !
+        long currentMinUtil = 0L; // ou valeur d'init voulue
+        OptimizedDataStructures dataStructures = new OptimizedDataStructures(dataset, currentMinUtil);
+        dataStructures.printStatistics();
 
-        // Initialiser la matrice de probabilité PM
+        // 3) Maintenant on peut appeler getPromisingItems() sans NPE
+        List<Integer> items = dataStructures.getPromisingItems();
+
+        // 4) calculer utilités des singletons
+        Map<Integer, Long> singletonUtils = dataStructures.computeSingletonUtilities(items);
+
+        // 5) trier les singletons par utilité décroissante
+        List<Map.Entry<Integer, Long>> singleList = new ArrayList<>(singletonUtils.entrySet());
+        singleList.sort((e1, e2) -> Long.compare(e2.getValue(), e1.getValue()));
+
+        // 6) construire topK initial à partir des k singletons les plus utiles
+        List<Sequence> topK = new ArrayList<>();
+        int initialCount = Math.min(config.getK(), singleList.size());
+        for (int idx = 0; idx < initialCount; idx++) {
+            int itemId = singleList.get(idx).getKey();
+            long util = singleList.get(idx).getValue();
+            Sequence s = new Sequence();
+            Itemset is = new Itemset();
+            is.addItem(new Item(itemId)); // Item utility = 0 for pattern, sequence utility will be set
+            s.addItemset(is);
+            s.setUtility((int) util); // store singleton utility as initial cached utility
+            topK.add(s);
+        }
+
+        // 7) initialiser currentMinUtil avec la k-ème utilité (ou la plus petite si moins de k)
+        if (singleList.size() >= config.getK()) {
+            currentMinUtil = singleList.get(config.getK() - 1).getValue();
+        } else if (!singleList.isEmpty()) currentMinUtil = singleList.getLast().getValue();
+
+        System.out.printf("Initial minUtil (from singletons) = %d\n", currentMinUtil);
+
+        // 8) Pruner les items : reconstruire promising items / index en utilisant currentMinUtil
+        dataStructures.updatePromisingItems(currentMinUtil);
+
+        // Vider les caches d'utilité (les patterns précédemment calculés peuvent ne plus être pertinents)
+        UtilityCalculator.clearCache();
+        this.cache.clear();
+
+        // 9) reconstruire la liste active d'items et initialiser PM sur les items prometteurs
+        items = dataStructures.getPromisingItems();
         double[][] PM = initializeProbabilityMatrix(
                 items.size(),
                 config.getMaxSequenceLength()
         );
-
-        List<Sequence> topK = new ArrayList<>();
+        // --------------------------------------------------------------------------
         int iteration = 1;
 
-        System.out.println("\n=== Starting TKU-SP Algorithm ===");
-        System.out.println(config);
-        System.out.println("Items: " + items);
-
-        while (iteration != config.getMaxIterations() && !isBinaryMatrix(PM)) {
+        while (iteration <= config.getMaxIterations() && !isBinaryMatrix(PM)) {
             System.out.printf("\n--- Iteration %d ---\n", iteration);
 
             // Générer l'échantillon
@@ -65,12 +105,13 @@ public class TKUSP implements Algorithm {
                     config.getMaxSequenceLength()
             );
 
-            // Calculer les utilités (avec cache)
+            // ===== CALCUL OPTIMISÉ DES UTILITÉS =====
+            System.out.println("Calculating utilities with optimized structures...");
             for (Sequence seq : sample) {
-                int utility = UtilityCalculator.calculateSequenceUtility(seq, dataset);
-                seq.setUtility(utility); // Il faut ajouter un setter dans Sequence
+                long utility = UtilityCalculator.calculateSequenceUtility(seq, dataStructures);
+                seq.setUtility((int) utility);
             }
-
+            // =========================================
 
             // Trier par utilité décroissante
             sample.sort((s1, s2) -> Integer.compare(s2.getUtility(), s1.getUtility()));
@@ -79,12 +120,29 @@ public class TKUSP implements Algorithm {
             int eliteSize = Math.max(1, (int) Math.ceil(config.getRho() * sample.size()));
             List<Sequence> elite = sample.subList(0, eliteSize);
 
-            System.out.printf("Sample size: %d, Elite size: %d\n", sample.size(), elite.size());
-            System.out.printf("Best utility: %d, Worst elite: %d\n",
-                    elite.get(0).getUtility(), elite.get(elite.size()-1).getUtility());
-
             // Mettre à jour top-k
             topK = updateTopK(topK, sample, config.getK());
+
+            // Mettre à jour currentMinUtil en utilisant le k-ième utilité de topK
+            long newMinUtilFromTopK = 0;
+            if (topK.size() >= config.getK()) {
+                newMinUtilFromTopK = topK.get(config.getK() - 1).getUtility();
+            } else if (!topK.isEmpty()) {
+                newMinUtilFromTopK = topK.getLast().getUtility();
+            }
+
+            if (newMinUtilFromTopK > currentMinUtil) {
+                System.out.printf("TopK increased minUtil: %d -> %d\n", currentMinUtil, newMinUtilFromTopK);
+                currentMinUtil = newMinUtilFromTopK;
+                // Pruner les items et reconstruire structures
+                dataStructures.updatePromisingItems(currentMinUtil);
+                // Vider caches d'utilité car les candidats antérieurs peuvent ne plus être valides
+                UtilityCalculator.clearCache();
+                this.cache.clear();
+                // reconstruire PM pour la nouvelle liste d'items
+                items = dataStructures.getPromisingItems();
+                PM = initializeProbabilityMatrix(items.size(), config.getMaxSequenceLength());
+            }
 
             // Mettre à jour la matrice de probabilité
             PM = updateProbabilityMatrix(PM, elite, items);
@@ -160,25 +218,33 @@ public class TKUSP implements Algorithm {
                                     int position, DatasetStatistics stats) {
         List<Item> chosenItems = new ArrayList<>();
 
-        // Pour chaque item, tirer selon PM[item][position]
+        // Construire d'abord la liste des candidats (comme avant)
         for (int itemIdx = 0; itemIdx < items.size(); itemIdx++) {
             if (random.nextDouble() < PM[itemIdx][position]) {
                 int itemId = items.get(itemIdx);
-                // NE PLUS GÉNÉRER D'UTILITÉ ALÉATOIRE
-                chosenItems.add(new Item(itemId)); // Utilité = 0 par défaut
+                chosenItems.add(new Item(itemId));
             }
         }
 
-        // Limiter la taille selon la distribution empirique
-        if (!chosenItems.isEmpty()) {
-            int maxElemSize = stats.sampleItemsetSize(random);
-            if (chosenItems.size() > maxElemSize) {
-                Collections.shuffle(chosenItems, random);
-                chosenItems = chosenItems.subList(0, maxElemSize);
+        int maxElemSize = stats.sampleItemsetSize(random);
+        if (maxElemSize <= 0) maxElemSize = 1;
+
+        // Si plus de candidats que k, faire un Fisher-Yates PARTIEL :
+        // pour i in [0..k-1] swap chosenItems[i] avec chosenItems[i + rnd(0..n-i-1)]
+        if (chosenItems.size() > maxElemSize) {
+            int n = chosenItems.size();
+            for (int i = 0; i < maxElemSize; i++) {
+                int j = i + random.nextInt(n - i); // j in [i, n-1]
+                // swap elements i et j
+                Item tmp = chosenItems.get(i);
+                chosenItems.set(i, chosenItems.get(j));
+                chosenItems.set(j, tmp);
             }
+            // Gagner du temps : on ne fait que k swaps (au lieu de n swaps d'un shuffle complet)
+            chosenItems = chosenItems.subList(0, maxElemSize);
         }
 
-        // Fallback si aucun item n'est choisi
+        // Fallback si aucun item choisi
         if (chosenItems.isEmpty()) {
             chosenItems.add(fallbackItem(PM, items, position));
         }
@@ -194,7 +260,7 @@ public class TKUSP implements Algorithm {
 
         if (sum == 0.0) {
             int itemId = items.get(random.nextInt(items.size()));
-            return new Item(itemId); // Sans utilité aléatoire
+            return new Item(itemId);
         }
 
         double r = random.nextDouble() * sum;
@@ -203,41 +269,50 @@ public class TKUSP implements Algorithm {
         for (int i = 0; i < items.size(); i++) {
             cumulative += PM[i][position];
             if (cumulative >= r) {
-                return new Item(items.get(i)); // Sans utilité aléatoire
+                return new Item(items.get(i));
             }
         }
 
-        return new Item(items.get(0)); // Sans utilité aléatoire
+        return new Item(items.get(0));
     }
 
     private List<Sequence> updateTopK(List<Sequence> currentTopK,
                                       List<Sequence> sample, int k) {
-        // Combiner currentTopK et sample
-        Set<String> seen = new HashSet<>();
-        List<Sequence> combined = new ArrayList<>();
 
+        // Min-heap : la plus petite utilité est en tête
+        PriorityQueue<Sequence> pq = new PriorityQueue<>(
+                Comparator.comparingInt(Sequence::getUtility)
+        );
+
+        // Déduplication par signature (évite d'ajouter la même séquence plusieurs fois)
+        Set<String> seen = new HashSet<>();
+
+        // Ajoute les éléments actuels
         for (Sequence seq : currentTopK) {
             String sig = seq.getSignature();
-            if (!seen.contains(sig)) {
-                combined.add(seq);
-                seen.add(sig);
+            if (seen.add(sig)) {
+                pq.offer(seq);
+                if (pq.size() > k) { // si dépassé, on retire le plus petit
+                    pq.poll();
+                }
             }
         }
 
+        // Ajoute les nouveaux candidats (sample)
         for (Sequence seq : sample) {
             String sig = seq.getSignature();
-            if (!seen.contains(sig)) {
-                combined.add(seq);
-                seen.add(sig);
+            if (seen.add(sig)) {
+                pq.offer(seq);
+                if (pq.size() > k) {
+                    pq.poll();
+                }
             }
         }
 
-        // Trier et garder top-k
-        combined.sort((s1, s2) -> Integer.compare(s2.getUtility(), s1.getUtility()));
-
-        return combined.stream()
-                .limit(k)
-                .collect(Collectors.toList());
+        // Récupérer les éléments du heap dans l'ordre décroissant
+        List<Sequence> result = new ArrayList<>(pq);
+        result.sort((a, b) -> Integer.compare(b.getUtility(), a.getUtility()));
+        return result;
     }
 
     private double[][] updateProbabilityMatrix(double[][] PM, List<Sequence> elite, List<Integer> items) {

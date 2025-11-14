@@ -16,7 +16,7 @@ public class Main {
             System.out.println("=== TKU-SP: Top-K Utility Sequential Pattern Mining ===\n");
 
             // 1. Lire le dataset
-            String inputPath = "data/kosarak10k_sequence_utility.txt";
+            String inputPath = "data/SIGN.txt";
             System.out.println("Reading dataset from: " + inputPath);
             Dataset dataset = DatasetReader.readDataset(inputPath);
             System.out.println("Dataset loaded: " + dataset);
@@ -25,9 +25,9 @@ public class Main {
             // 2. Configuration de l'algorithme
             AlgorithmConfig config = new AlgorithmConfig(
                     10,      // k = 10 (top-10 patterns)
-                    200,     // N = 200 (sample size)
+                    2000,     // N = 2000 (sample size)
                     0.2,     // rho = 0.2 (20% elite)
-                    200,      // max_iter = 100
+                    500,      // max_iter = 2000
                     10        // max_length_sequence = 10
             );
 
@@ -48,7 +48,7 @@ public class Main {
             }
 
             // 5. Sauvegarder les résultats
-            String outputPath = "output/topk_results_kosarak10k.txt";
+            String outputPath = "output/SIGN.txt";
             OutputWriter.writeResults(
                     topK,
                     outputPath,
