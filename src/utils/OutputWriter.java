@@ -37,8 +37,6 @@ public class OutputWriter {
 
             for (int i = 0; i < topK.size(); i++) {
                 Sequence seq = topK.get(i);
-                writer.write(String.format("\n[%d] Utility: %d\n",
-                        i + 1, seq.getUtility()));
                 writer.write(seq.toString() + "\n");
             }
         }

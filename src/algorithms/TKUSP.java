@@ -44,12 +44,9 @@ public class TKUSP implements Algorithm {
         // 2) INITIALISER dataStructures AVANT toute utilisation !
         long currentMinUtil = 0L; // ou valeur d'init voulue
         OptimizedDataStructures dataStructures = new OptimizedDataStructures(dataset, currentMinUtil);
-        dataStructures.printStatistics();
-
-        // 3) Maintenant on peut appeler getPromisingItems() sans NPE
-        List<Integer> items = dataStructures.getPromisingItems();
 
         // 4) calculer utilités des singletons
+        List<Integer> items = dataStructures.getPromisingItems();
         Map<Integer, Long> singletonUtils = dataStructures.computeSingletonUtilities(items);
 
         // 5) trier les singletons par utilité décroissante
@@ -90,6 +87,7 @@ public class TKUSP implements Algorithm {
                 items.size(),
                 config.getMaxSequenceLength()
         );
+        dataStructures.printStatistics();
         // --------------------------------------------------------------------------
         int iteration = 1;
 

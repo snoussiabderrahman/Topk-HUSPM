@@ -55,7 +55,7 @@ public class Sequence {
     public String toString() {
         return itemsets.stream()
                 .map(Itemset::toString)
-                .collect(Collectors.joining(" ")) + " #SUtility:" + getUtility();
+                .collect(Collectors.joining(" ")) + " #UTIL:" + getUtility();
     }
 
     public String toCompactString() {
