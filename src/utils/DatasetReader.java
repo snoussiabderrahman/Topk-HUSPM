@@ -38,7 +38,7 @@ public class DatasetReader {
         Sequence sequence = new Sequence();
         Itemset currentItemset = new Itemset();
 
-        // Supprimer la partie SUtility si présente
+        // Séparer la partie principale et la partie SUtility si elle existe
         String[] parts = line.split("SUtility:");
         String data = parts[0].trim();
 
@@ -61,6 +61,20 @@ public class DatasetReader {
                         token.substring(token.indexOf('[') + 1, token.indexOf(']'))
                 );
                 currentItemset.addItem(new Item(itemId, utility));
+            }
+        }
+
+        // prend la 1ère valeur numérique après "SUtility:"
+        if (parts.length > 1) {
+            String utilPart = parts[1].trim();
+            if (!utilPart.isEmpty()) {
+                try {
+                    String numberStr = utilPart.split("\\s+")[0]; // prendre le premier token après SUtility:
+                    int sUtil = Integer.parseInt(numberStr);
+                    sequence.setUtility(sUtil);
+                } catch (NumberFormatException ignored) {
+                    // si parsing échoue, on laisse la Sequence calculer sa utilité plus tard
+                }
             }
         }
 

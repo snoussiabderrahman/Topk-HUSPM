@@ -1,6 +1,7 @@
 package model;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class Dataset {
@@ -14,16 +15,23 @@ public class Dataset {
                 .sum();
     }
 
+    /**
+     * Retourne une vue non modifiable sur la liste interne.
+     * Plus rapide que de renvoyer une copie à chaque appel.
+     */
     public List<Sequence> getSequences() {
-        return new ArrayList<>(sequences);
+        return Collections.unmodifiableList(sequences);
+    }
+
+    /**
+     * Accès direct et rapide par index (évite la création d'une copie).
+     */
+    public Sequence getSequence(int index) {
+        return sequences.get(index);
     }
 
     public int size() {
         return sequences.size();
-    }
-
-    public int getTotalUtility() {
-        return totalUtility;
     }
 
     @Override

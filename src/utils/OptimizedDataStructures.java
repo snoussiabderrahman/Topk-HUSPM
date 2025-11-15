@@ -94,10 +94,10 @@ public class OptimizedDataStructures {
      * COMPLEXITÉ : O(|dataset| × avg_seq_length × avg_itemset_size)
      */
     private void buildSWU() {
-        List<Sequence> sequences = dataset.getSequences();
-
-        for (Sequence seq : sequences) {
-            int seqUtility = seq.getUtility();
+        int n = dataset.size();
+        for (int seqIdx = 0; seqIdx < n; seqIdx++) {
+            Sequence seq = dataset.getSequence(seqIdx); // accès direct, pas de copie
+            int seqUtility = seq.getUtility(); // utilisera SUtility si elle a été parsée
             Set<Integer> itemsInSeq = new HashSet<>();
 
             // Collecter tous les items distincts dans cette séquence
@@ -144,28 +144,26 @@ public class OptimizedDataStructures {
      * COMPLEXITÉ : O(|dataset| × avg_seq_length × avg_itemset_size)
      */
     private void buildInvertedIndex() {
-        List<Sequence> sequences = dataset.getSequences();
+        int n = dataset.size();
 
-        // Initialiser les BitSets
+        // Pour accélérer contains() lors du remplissage, transformer promisingItems en HashSet
+        Set<Integer> promisingSet = new HashSet<>(promisingItems);
         for (Integer itemId : promisingItems) {
             itemToSequenceBitSet.put(itemId, new BitSet(datasetSize));
         }
 
-        // Remplir les BitSets
-        for (int seqIdx = 0; seqIdx < sequences.size(); seqIdx++) {
-            Sequence seq = sequences.get(seqIdx);
+        for (int seqIdx = 0; seqIdx < n; seqIdx++) {
+            Sequence seq = dataset.getSequence(seqIdx);
             Set<Integer> itemsInSeq = new HashSet<>();
 
-            // Collecter les items
             for (Itemset itemset : seq.getItemsets()) {
                 for (Item item : itemset.getItems()) {
-                    if (promisingItems.contains(item.getId())) {
+                    if (promisingSet.contains(item.getId())) {
                         itemsInSeq.add(item.getId());
                     }
                 }
             }
 
-            // Marquer ce seqIdx dans le BitSet de chaque item
             for (Integer itemId : itemsInSeq) {
                 itemToSequenceBitSet.get(itemId).set(seqIdx);
             }

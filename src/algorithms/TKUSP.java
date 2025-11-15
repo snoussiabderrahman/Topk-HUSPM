@@ -106,7 +106,6 @@ public class TKUSP implements Algorithm {
             );
 
             // ===== CALCUL OPTIMISÉ DES UTILITÉS =====
-            System.out.println("Calculating utilities with optimized structures...");
             for (Sequence seq : sample) {
                 long utility = UtilityCalculator.calculateSequenceUtility(seq, dataStructures);
                 seq.setUtility((int) utility);
