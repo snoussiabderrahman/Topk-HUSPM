@@ -76,6 +76,8 @@ public class TKUSP implements Algorithm {
 
         // 8) Pruner les items : reconstruire promising items / index en utilisant currentMinUtil
         dataStructures.updatePromisingItems(currentMinUtil);
+        // réduire le cache par-sequence en supprimant les ids non-prometteurs
+        dataStructures.releaseNonPromisingDistinctIds();
 
         // Vider les caches d'utilité (les patterns précédemment calculés peuvent ne plus être pertinents)
         UtilityCalculator.clearCache();
@@ -87,6 +89,7 @@ public class TKUSP implements Algorithm {
                 items.size(),
                 config.getMaxSequenceLength()
         );
+
         dataStructures.printStatistics();
         // --------------------------------------------------------------------------
         int iteration = 1;
@@ -133,6 +136,9 @@ public class TKUSP implements Algorithm {
                 currentMinUtil = newMinUtilFromTopK;
                 // Pruner les items et reconstruire structures
                 dataStructures.updatePromisingItems(currentMinUtil);
+                // réduire le cache par-sequence en supprimant les ids non-prometteurs
+                dataStructures.releaseNonPromisingDistinctIds();
+
                 // Vider caches d'utilité car les candidats antérieurs peuvent ne plus être valides
                 UtilityCalculator.clearCache();
                 this.cache.clear();
@@ -146,7 +152,7 @@ public class TKUSP implements Algorithm {
 
             iteration++;
         }
-
+        dataStructures.releasePerSequenceDistinctIds();
         long endTime = System.currentTimeMillis();
         this.runtime = endTime - startTime;
 
