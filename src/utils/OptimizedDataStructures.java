@@ -96,19 +96,10 @@ public class OptimizedDataStructures {
     private void buildSWU() {
         int n = dataset.size();
         for (int seqIdx = 0; seqIdx < n; seqIdx++) {
-            Sequence seq = dataset.getSequence(seqIdx); // accès direct, pas de copie
-            int seqUtility = seq.getUtility(); // utilisera SUtility si elle a été parsée
-            Set<Integer> itemsInSeq = new HashSet<>();
-
-            // Collecter tous les items distincts dans cette séquence
-            for (Itemset itemset : seq.getItemsets()) {
-                for (Item item : itemset.getItems()) {
-                    itemsInSeq.add(item.getId());
-                }
-            }
-
-            // Ajouter l'utilité de la séquence au SWU de chaque item
-            for (Integer itemId : itemsInSeq) {
+            Sequence seq = dataset.getSequence(seqIdx);
+            int seqUtility = seq.getUtility(); // utilise SUtility si parsée
+            int[] distinct = seq.getDistinctItemIds(); // rapide et cached
+            for (int itemId : distinct) {
                 mapItemToSWU.put(itemId,
                         mapItemToSWU.getOrDefault(itemId, 0L) + seqUtility);
             }
@@ -145,8 +136,6 @@ public class OptimizedDataStructures {
      */
     private void buildInvertedIndex() {
         int n = dataset.size();
-
-        // Pour accélérer contains() lors du remplissage, transformer promisingItems en HashSet
         Set<Integer> promisingSet = new HashSet<>(promisingItems);
         for (Integer itemId : promisingItems) {
             itemToSequenceBitSet.put(itemId, new BitSet(datasetSize));
@@ -154,18 +143,11 @@ public class OptimizedDataStructures {
 
         for (int seqIdx = 0; seqIdx < n; seqIdx++) {
             Sequence seq = dataset.getSequence(seqIdx);
-            Set<Integer> itemsInSeq = new HashSet<>();
-
-            for (Itemset itemset : seq.getItemsets()) {
-                for (Item item : itemset.getItems()) {
-                    if (promisingSet.contains(item.getId())) {
-                        itemsInSeq.add(item.getId());
-                    }
+            int[] distinct = seq.getDistinctItemIds();
+            for (int itemId : distinct) {
+                if (promisingSet.contains(itemId)) {
+                    itemToSequenceBitSet.get(itemId).set(seqIdx);
                 }
-            }
-
-            for (Integer itemId : itemsInSeq) {
-                itemToSequenceBitSet.get(itemId).set(seqIdx);
             }
         }
     }
@@ -210,7 +192,7 @@ public class OptimizedDataStructures {
 
         // Calculer l'intersection des BitSets
         List<Integer> items = new ArrayList<>(itemSet);
-        BitSet result = (BitSet) itemToSequenceBitSet.get(items.getFirst()).clone();
+        BitSet result = (BitSet) itemToSequenceBitSet.get(items.get(0)).clone();
 
         for (int i = 1; i < items.size(); i++) {
             result.and(itemToSequenceBitSet.get(items.get(i)));
@@ -247,27 +229,23 @@ public class OptimizedDataStructures {
                 continue;
             }
             for (int seqIdx = bs.nextSetBit(0); seqIdx >= 0; seqIdx = bs.nextSetBit(seqIdx + 1)) {
-                int maxUtilityInSeq = getMaxUtilityInSeq(itemId, seqIdx);
+                Sequence seq = dataset.getSequence(seqIdx);
+                // si les item utility peuvent être multiples, on cherche la valeur max,
+                // mais on peut aussi parcourir itemsets et récupérer la première correspondance.
+                int maxUtilityInSeq = 0;
+                for (Itemset it : seq.getItemsets()) {
+                    for (Item itItem : it.getItems()) {
+                        if (itItem.getId() == itemId) {
+                            int u = itItem.getUtility();
+                            if (u > maxUtilityInSeq) maxUtilityInSeq = u;
+                        }
+                    }
+                }
                 total += maxUtilityInSeq;
             }
             result.put(itemId, total);
         }
         return result;
-    }
-
-    private int getMaxUtilityInSeq(Integer itemId, int seqIdx) {
-        Sequence seq = dataset.getSequences().get(seqIdx);
-        int maxUtilityInSeq = 0;
-        // rechercher l'utilité maximale de itemId dans cette q-sequence
-        for (Itemset it : seq.getItemsets()) {
-            for (Item itItem : it.getItems()) {
-                if (itItem.getId() == itemId) {
-                    int u = itItem.getUtility();
-                    if (u > maxUtilityInSeq) maxUtilityInSeq = u;
-                }
-            }
-        }
-        return maxUtilityInSeq;
     }
 
     /**
@@ -298,6 +276,12 @@ public class OptimizedDataStructures {
         return mapItemToSWU.getOrDefault(itemId, 0L);
     }
 
+    public void releasePerSequenceDistinctIds() {
+        for (int i = 0; i < dataset.size(); i++) {
+            dataset.getSequence(i).clearDistinctItemIds();
+        }
+    }
+
     /**
      * Met à jour les items prometteurs avec un nouveau minUtil
      *
@@ -308,6 +292,22 @@ public class OptimizedDataStructures {
         intersectionCache.clear(); // Invalider le cache
         filterPromisingItems(newMinUtil);
         buildInvertedIndex();
+    }
+
+    /**
+     * Pour chaque séquence du dataset, réduit son cache distinctItemIds
+     * en ne conservant que les items présents dans promisingItems.
+     * Appeler après updatePromisingItems(...) pour récupérer de la mémoire
+     * tout en conservant les ids encore utiles.
+     */
+    public void releaseNonPromisingDistinctIds() {
+        Set<Integer> promisingSet = new HashSet<>(promisingItems);
+        int n = dataset.size();
+        for (int i = 0; i < n; i++) {
+            Sequence seq = dataset.getSequence(i);
+            // méthode dans Sequence : conserve seulement les ids prometteurs
+            seq.retainDistinctItemIds(promisingSet);
+        }
     }
 
     /**

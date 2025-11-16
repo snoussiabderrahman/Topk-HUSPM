@@ -70,7 +70,7 @@ public class TKUSP implements Algorithm {
         // 7) initialiser currentMinUtil avec la k-ème utilité (ou la plus petite si moins de k)
         if (singleList.size() >= config.getK()) {
             currentMinUtil = singleList.get(config.getK() - 1).getValue();
-        } else if (!singleList.isEmpty()) currentMinUtil = singleList.getLast().getValue();
+        } else if (!singleList.isEmpty()) currentMinUtil = singleList.get(singleList.size() - 1).getValue();
 
         System.out.printf("Initial minUtil (from singletons) = %d\n", currentMinUtil);
 
@@ -128,7 +128,7 @@ public class TKUSP implements Algorithm {
             if (topK.size() >= config.getK()) {
                 newMinUtilFromTopK = topK.get(config.getK() - 1).getUtility();
             } else if (!topK.isEmpty()) {
-                newMinUtilFromTopK = topK.getLast().getUtility();
+                newMinUtilFromTopK = topK.get(topK.size() - 1).getUtility();
             }
 
             if (newMinUtilFromTopK > currentMinUtil) {
