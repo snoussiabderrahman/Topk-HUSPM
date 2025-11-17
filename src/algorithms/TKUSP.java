@@ -279,8 +279,8 @@ public class TKUSP implements Algorithm {
         return new Item(items.get(0));
     }
 
-    private List<Sequence> updateTopK(List<Sequence> currentTopK,
-                                      List<Sequence> sample, int k) {
+    private List<Sequence> updateTopK(List<Sequence> currentTopK, List<Sequence> sample, int k) {
+        System.out.printf("update topk ...");
 
         // Min-heap : la plus petite utilité est en tête
         PriorityQueue<Sequence> pq = new PriorityQueue<>(
