@@ -27,5 +27,6 @@ bin/
 .vscode/
 
 ### Mac OS ###
-.DS_Storelib/javafx-sdk-21.0.9/lib/libjfxwebkit.so
-/.lib/
+.DS_Store
+lib/javafx-sdk-21.0.9/lib/libjfxwebkit.so
+lib/
