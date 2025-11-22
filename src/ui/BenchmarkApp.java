@@ -28,7 +28,7 @@ public class BenchmarkApp extends Application {
 
     private final ObservableList<BenchmarkResult> results = FXCollections.observableArrayList();
 
-    private File dataFolder = new File("data");
+    private final File dataFolder = new File("data");
     private File outputFolder = new File("output");
 
     @Override
@@ -314,8 +314,7 @@ public class BenchmarkApp extends Application {
         });
         // default load
         refreshDatasets.fire();
-        VBox dsSection = new VBox(6, refreshDatasets, new ScrollPane(dsBox));
-        return dsSection;
+        return new VBox(6, refreshDatasets, new ScrollPane(dsBox));
     }
 
     private void populateResultsTableFromOutput(File out, ObservableList<BenchmarkResult> results) {

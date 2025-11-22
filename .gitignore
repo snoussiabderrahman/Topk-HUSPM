@@ -30,3 +30,7 @@ bin/
 .DS_Store
 lib/javafx-sdk-21.0.9/lib/libjfxwebkit.so
 lib/
+
+### Output ###
+output/*
+!output/.gitkeep
