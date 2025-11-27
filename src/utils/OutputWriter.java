@@ -29,7 +29,7 @@ public class OutputWriter {
                                     long runtime, double memory) throws IOException {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath))) {
             writer.write("=== Algorithm Results ===\n");
-            writer.write(String.format("Runtime: %d ms\n", runtime));
+            writer.write(String.format("Runtime: %.2f s\n", runtime/1000.0));
             writer.write(String.format("Memory: %.2f MB\n", memory));
             writer.write(String.format("Top-K size: %d\n", topK.size()));
             writer.write("\n");

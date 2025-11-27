@@ -90,4 +90,11 @@ public class UtilityCalculator {
         cache.clear();
     }
 
+    /**
+     * Expose les statistiques du cache interne pour le debug / affichage.
+     */
+    public static void printCacheStatistics() {
+        cache.printStatistics();
+    }
+
 }

@@ -4,26 +4,21 @@ import config.AlgorithmConfig;
 import model.*;
 import utils.DatasetStatistics;
 import utils.OptimizedDataStructures;
-import utils.UtilityCache;
 import utils.UtilityCalculator;
 
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class TKUSP implements Algorithm {
     private long runtime;
     private double memoryUsage;
-    private final UtilityCache cache;
     private final Random random;
 
     public TKUSP() {
-        this.cache = new UtilityCache();
         this.random = new Random();
     }
 
     public TKUSP(long seed) {
-        this.cache = new UtilityCache();
         this.random = new Random(seed);
     }
 
@@ -81,7 +76,6 @@ public class TKUSP implements Algorithm {
 
         // Vider les caches d'utilité (les patterns précédemment calculés peuvent ne plus être pertinents)
         UtilityCalculator.clearCache();
-        this.cache.clear();
 
         // 9) reconstruire la liste active d'items et initialiser PM sur les items prometteurs
         items = dataStructures.getPromisingItems();
@@ -141,7 +135,7 @@ public class TKUSP implements Algorithm {
 
                 // Vider caches d'utilité car les candidats antérieurs peuvent ne plus être valides
                 UtilityCalculator.clearCache();
-                this.cache.clear();
+
                 // reconstruire PM pour la nouvelle liste d'items
                 items = dataStructures.getPromisingItems();
                 PM = initializeProbabilityMatrix(items.size(), config.getMaxSequenceLength());
@@ -163,7 +157,7 @@ public class TKUSP implements Algorithm {
         System.out.printf("Total iterations: %d\n", iteration - 1);
         System.out.printf("Runtime: %.2f s\n", this.runtime/1000.0);
         System.out.printf("Memory: %.2f MB\n", this.memoryUsage);
-        cache.printStatistics();
+        UtilityCalculator.printCacheStatistics();
 
         return topK;
     }
