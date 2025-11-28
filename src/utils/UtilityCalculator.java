@@ -2,80 +2,48 @@ package utils;
 
 import model.*;
 import java.util.BitSet;
+import java.util.Collection;
 
 /**
- * Calculateur d'utilité ULTRA-OPTIMISÉ pour HUSPM
- *
- * AMÉLIORATIONS PAR RAPPORT À LA VERSION PRÉCÉDENTE :
- * 1. Utilise OptimizedDataStructures pour éviter de parcourir tout le dataset
- * 2. Utilise FastSequenceMatcher pour un matching rapide
- * 3. Cache les résultats avec signature structurelle
- * 4. Élagage précoce avec SWU
- *
- * COMPLEXITÉ :
- * - Avant : O(|dataset| × complexité_matching)
- * - Maintenant : O(|candidates| × complexité_matching)
- *   où |candidates| << |dataset| grâce aux BitSets
+ * UtilityCalculator : utilise UtilityCache pour mémoriser utilités.
  */
 public class UtilityCalculator {
 
-    /**
-     * Cache des utilités calculées
-     */
     private static final UtilityCache cache = new UtilityCache();
 
-    /**
-     * Calcule l'utilité d'une séquence générée selon la Définition 5
-     *
-     * ALGORITHME OPTIMISÉ :
-     * 1. Extraire les items de la séquence générée
-     * 2. Utiliser l'index inversé (BitSet) pour trouver les q-sequences candidates
-     * 3. Pour chaque q-sequence candidate, calculer Sequential Maximal Utility
-     * 4. Sommer tous les maximums
-     *
-     * @param generated la séquence générée
-     * @param dataStructures les structures optimisées
-     * @return l'utilité totale
-     */
     public static long calculateSequenceUtility(
             Sequence generated,
             OptimizedDataStructures dataStructures) {
 
-        // Vérifier le cache
         String signature = generated.getSignature();
-        Integer cachedUtility = cache.get(signature);
+        Long cachedUtility = cache.get(signature);
         if (cachedUtility != null) {
             return cachedUtility;
         }
 
-        // Étape 1 : Trouver les q-sequences candidates avec BitSet
         BitSet candidateBitSet = dataStructures.findCandidateSequences(generated);
 
         if (candidateBitSet.isEmpty()) {
-            cache.put(signature, 0);
-            return 0;
+            cache.put(signature, 0L, generated.getDistinctItemIds());
+            return 0L;
         }
 
-        // Étape 2 : Pour chaque q-sequence candidate, calculer max utility
         long totalUtility = getTotalUtility(generated, dataStructures, candidateBitSet);
 
-        // Mettre en cache
-        cache.put(signature, (int) totalUtility);
+        cache.put(signature, totalUtility, generated.getDistinctItemIds());
 
         return totalUtility;
     }
 
-    private static long getTotalUtility(Sequence generated, OptimizedDataStructures dataStructures, BitSet candidateBitSet) {
+    private static long getTotalUtility(Sequence generated, OptimizedDataStructures dataStructures,
+            BitSet candidateBitSet) {
 
         long totalUtility = 0;
 
-        for (int seqIdx = candidateBitSet.nextSetBit(0);
-             seqIdx >= 0;
-             seqIdx = candidateBitSet.nextSetBit(seqIdx + 1)) {
+        for (int seqIdx = candidateBitSet.nextSetBit(0); seqIdx >= 0; seqIdx = candidateBitSet.nextSetBit(seqIdx + 1)) {
 
             Sequence qseq = dataStructures.getSequence(seqIdx);
 
-            // Calculer Sequential Maximal Utility pour cette q-sequence
             long maxUtility = FastSequenceMatcher.findMaximalUtility(generated, qseq);
 
             totalUtility += maxUtility;
@@ -84,17 +52,21 @@ public class UtilityCalculator {
     }
 
     /**
-     * Réinitialise le cache
+     * Réinitialise complètement le cache.
      */
     public static void clearCache() {
         cache.clear();
     }
 
     /**
-     * Expose les statistiques du cache interne pour le debug / affichage.
+     * Invalide sélectivement les entrées du cache qui utilisent des items
+     * qui viennent d'être supprimés des promising items.
      */
+    public static void invalidateCacheForRemovedItems(Collection<Integer> removedItems) {
+        cache.invalidateEntriesContainingAny(removedItems);
+    }
+
     public static void printCacheStatistics() {
         cache.printStatistics();
     }
-
 }

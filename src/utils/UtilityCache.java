@@ -1,63 +1,87 @@
 package utils;
 
-import model.Sequence;
-
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
- * UtilityCache : cache simple pour utilités de séquences.
- * Fournit :
- *  - Integer get(String signature)   // retourne null si absent
- *  - void put(String signature, int value)
- *  - int getUtility(Sequence sequence) // ancienne API compatible
- *  - void clear(), printStatistics(), getHitRate()
+ * UtilityCache : cache simple pour utilités de séquences, avec
+ * invalidation sélective par items supprimés.
  */
 public class UtilityCache {
-    private final Map<String, Integer> cache;
-    private int hits;
-    private int misses;
+    private static class Entry {
+        final long value;
+        final int[] itemIds; // ids distincts de la séquence mise en cache (triés)
 
-    public UtilityCache() {
-        this.cache = new HashMap<>();
-        this.hits = 0;
-        this.misses = 0;
+        Entry(long value, int[] itemIds) {
+            this.value = value;
+            if (itemIds == null || itemIds.length == 0) {
+                this.itemIds = new int[0];
+            } else {
+                this.itemIds = Arrays.copyOf(itemIds, itemIds.length);
+                Arrays.sort(this.itemIds);
+            }
+        }
     }
 
-    /**
-     * Récupère la valeur en cache par clé (signature).
-     * Retourne null si absent.
-     */
-    public Integer get(String signature) {
-        Integer v = cache.get(signature);
-        if (v != null) {
+    private final Map<String, Entry> cache = new HashMap<>();
+    private int hits = 0;
+    private int misses = 0;
+
+    public synchronized Long get(String signature) {
+        Entry e = cache.get(signature);
+        if (e != null) {
             hits++;
+            return e.value;
         } else {
             misses++;
+            return null;
         }
-        return v;
     }
 
     /**
-     * Stocke une valeur dans le cache.
+     * Stocke la valeur et la liste des itemIds associés.
      */
-    public void put(String signature, int value) {
-        cache.put(signature, value);
+    public synchronized void put(String signature, long value, int[] itemIds) {
+        cache.put(signature, new Entry(value, itemIds));
     }
 
-    public void clear() {
+    public synchronized void clear() {
         cache.clear();
         hits = 0;
         misses = 0;
     }
 
-    public double getHitRate() {
+    public synchronized double getHitRate() {
         int total = hits + misses;
         return total == 0 ? 0.0 : (double) hits / total;
     }
 
-    public void printStatistics() {
-        System.out.printf("Cache - Hits: %d, Misses: %d, Hit Rate: %.2f%%\n",
-                hits, misses, getHitRate() * 100);
+    public synchronized void printStatistics() {
+        System.out.printf("Cache - Entries: %d, Hits: %d, Misses: %d, Hit Rate: %.2f%%%n",
+                cache.size(), hits, misses, getHitRate() * 100);
+    }
+
+    /**
+     * Invalide (supprime) les entrées du cache qui contiennent au moins
+     * un des itemIds dans removedItems.
+     */
+    public synchronized void invalidateEntriesContainingAny(Collection<Integer> removedItems) {
+        if (removedItems == null || removedItems.isEmpty())
+            return;
+        Set<Integer> removed = (removedItems instanceof Set) ? (Set<Integer>) removedItems
+                : new HashSet<>(removedItems);
+
+        Iterator<Map.Entry<String, Entry>> it = cache.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<String, Entry> en = it.next();
+            Entry entry = en.getValue();
+            int[] ids = entry.itemIds;
+            // test d'intersection (ids triés mais ici HashSet lookup est suffisant)
+            for (int id : ids) {
+                if (removed.contains(id)) {
+                    it.remove();
+                    break;
+                }
+            }
+        }
     }
 }

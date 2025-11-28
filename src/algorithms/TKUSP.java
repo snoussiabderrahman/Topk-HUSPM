@@ -6,7 +6,6 @@ import utils.DatasetStatistics;
 import utils.OptimizedDataStructures;
 import utils.UtilityCalculator;
 
-
 import java.util.*;
 
 public class TKUSP implements Algorithm {
@@ -62,27 +61,31 @@ public class TKUSP implements Algorithm {
             topK.add(s);
         }
 
-        // 7) initialiser currentMinUtil avec la k-ème utilité (ou la plus petite si moins de k)
+        // 7) initialiser currentMinUtil avec la k-ème utilité (ou la plus petite si
+        // moins de k)
         if (singleList.size() >= config.getK()) {
             currentMinUtil = singleList.get(config.getK() - 1).getValue();
-        } else if (!singleList.isEmpty()) currentMinUtil = singleList.get(singleList.size() - 1).getValue();
+        } else if (!singleList.isEmpty())
+            currentMinUtil = singleList.get(singleList.size() - 1).getValue();
 
         System.out.printf("Initial minUtil (from singletons) = %d\n", currentMinUtil);
 
-        // 8) Pruner les items : reconstruire promising items / index en utilisant currentMinUtil
+        // 8) Pruner les items : reconstruire promising items / index en utilisant
+        // currentMinUtil
         dataStructures.updatePromisingItems(currentMinUtil);
         // réduire le cache par-sequence en supprimant les ids non-prometteurs
         dataStructures.releaseNonPromisingDistinctIds();
 
-        // Vider les caches d'utilité (les patterns précédemment calculés peuvent ne plus être pertinents)
+        // Vider les caches d'utilité (les patterns précédemment calculés peuvent ne
+        // plus être pertinents)
         UtilityCalculator.clearCache();
 
-        // 9) reconstruire la liste active d'items et initialiser PM sur les items prometteurs
+        // 9) reconstruire la liste active d'items et initialiser PM sur les items
+        // prometteurs
         items = dataStructures.getPromisingItems();
         double[][] PM = initializeProbabilityMatrix(
                 items.size(),
-                config.getMaxSequenceLength()
-        );
+                config.getMaxSequenceLength());
 
         dataStructures.printStatistics();
         // --------------------------------------------------------------------------
@@ -97,8 +100,7 @@ public class TKUSP implements Algorithm {
                     config.getSampleSize(),
                     items,
                     stats,
-                    config.getMaxSequenceLength()
-            );
+                    config.getMaxSequenceLength());
 
             // ===== CALCUL OPTIMISÉ DES UTILITÉS =====
             for (Sequence seq : sample) {
@@ -114,6 +116,13 @@ public class TKUSP implements Algorithm {
             int eliteSize = Math.max(1, (int) Math.ceil(config.getRho() * sample.size()));
             List<Sequence> elite = sample.subList(0, eliteSize);
 
+            // Ajouter ce diagnostic :
+            /*
+            int maxEliteLength = elite.stream().mapToInt(Sequence::length).max().orElse(0);
+            int avgEliteLength = (int) elite.stream().mapToInt(Sequence::length).average().orElse(0);
+            System.out.printf("Elite: max_length=%d, avg_length=%d\n", maxEliteLength, avgEliteLength);
+            */
+
             // Mettre à jour top-k
             topK = updateTopK(topK, sample, config.getK());
 
@@ -128,21 +137,39 @@ public class TKUSP implements Algorithm {
             if (newMinUtilFromTopK > currentMinUtil) {
                 System.out.printf("TopK increased minUtil: %d -> %d\n", currentMinUtil, newMinUtilFromTopK);
                 currentMinUtil = newMinUtilFromTopK;
-                // Pruner les items et reconstruire structures
+
+                // sauvegarder ancien mapping items -> PM (ou juste les items)
+                List<Integer> oldItemsForPM = new ArrayList<>(items);
+                double[][] oldPMForMerge = copyMatrix(PM);
+
+                // pruning
                 dataStructures.updatePromisingItems(currentMinUtil);
-                // réduire le cache par-sequence en supprimant les ids non-prometteurs
                 dataStructures.releaseNonPromisingDistinctIds();
 
-                // Vider caches d'utilité car les candidats antérieurs peuvent ne plus être valides
-                UtilityCalculator.clearCache();
-
-                // reconstruire PM pour la nouvelle liste d'items
+                // nouvelle liste d'items prometteurs
                 items = dataStructures.getPromisingItems();
-                PM = initializeProbabilityMatrix(items.size(), config.getMaxSequenceLength());
+
+                // calculer les items supprimés
+                Set<Integer> removed = new HashSet<>(oldItemsForPM);
+                removed.removeAll(items);
+
+                if (!removed.isEmpty()) {
+                    // invalider seulement les entrées qui contiennent les items supprimés
+                    UtilityCalculator.invalidateCacheForRemovedItems(removed);
+                }
+
+                // reconstruire PM en préservant les lignes des items communs ...
+                PM = rebuildProbabilityMatrixPreserving(oldPMForMerge, oldItemsForPM, items,
+                        config.getMaxSequenceLength());
             }
 
             // Mettre à jour la matrice de probabilité
             PM = updateProbabilityMatrix(PM, elite, items);
+
+
+            // Afficher la matrice PM après la mise à jour
+            //System.out.println("\n=== Matrice PM après updateProbabilityMatrix (Iteration " + iteration + ") ===");
+            //printProbabilityMatrix(PM, items);
 
             iteration++;
         }
@@ -155,11 +182,66 @@ public class TKUSP implements Algorithm {
 
         System.out.println("\n=== Algorithm Completed ===");
         System.out.printf("Total iterations: %d\n", iteration - 1);
-        System.out.printf("Runtime: %.2f s\n", this.runtime/1000.0);
+        System.out.printf("Runtime: %.2f s\n", this.runtime / 1000.0);
         System.out.printf("Memory: %.2f MB\n", this.memoryUsage);
         UtilityCalculator.printCacheStatistics();
 
         return topK;
+    }
+
+    /**
+     * Copie profonde d'une matrice double.
+     */
+    private double[][] copyMatrix(double[][] src) {
+        if (src == null)
+            return null;
+        int rows = src.length;
+        int cols = src[0].length;
+        double[][] dst = new double[rows][cols];
+        for (int i = 0; i < rows; i++) {
+            System.arraycopy(src[i], 0, dst[i], 0, src[i].length);
+        }
+        return dst;
+    }
+
+    /**
+     * Reconstruit une PM de taille newItems.size() x maxCols :
+     * - copie les lignes de oldPM correspondant aux itemIds communs (par id),
+     * - initialise à defaultProb les lignes des nouveaux items,
+     * - copie au plus min(oldCols, maxCols) colonnes (oldCols peut être égal à
+     * maxCols).
+     */
+    private double[][] rebuildProbabilityMatrixPreserving(
+            double[][] oldPM,
+            List<Integer> oldItems,
+            List<Integer> newItems,
+            int maxCols) {
+
+        // Hypothèses : oldPM != null, oldItems != null, newItems subset of oldItems,
+        // oldPM[0].length == maxCols, et newItems.size() <= oldItems.size()
+
+        int newRows = newItems.size();
+        double[][] newPM = new double[newRows][maxCols];
+
+        // initialiser à defaultProb
+        for (int i = 0; i < newRows; i++) {
+            Arrays.fill(newPM[i], 0.5);
+        }
+
+        // construire map itemId -> oldIndex (nécessaire pour aligner par id)
+        Map<Integer, Integer> oldIndex = new HashMap<>(oldItems.size());
+        for (int i = 0; i < oldItems.size(); i++)
+            oldIndex.put(oldItems.get(i), i);
+
+        // copier directement maxCols colonnes (on assume oldPM[oi].length == maxCols)
+        for (int r = 0; r < newRows; r++) {
+            Integer oi = oldIndex.get(newItems.get(r));
+            if (oi != null) {
+                System.arraycopy(oldPM[oi], 0, newPM[r], 0, maxCols);
+            }
+        }
+
+        return newPM;
     }
 
     private double[][] initializeProbabilityMatrix(int numItems, int maxLength) {
@@ -184,13 +266,13 @@ public class TKUSP implements Algorithm {
     }
 
     private List<Sequence> generateSample(double[][] PM, int N, List<Integer> items,
-                                          DatasetStatistics stats, int maxLength) {
+            DatasetStatistics stats, int maxLength) {
         List<Sequence> sample = new ArrayList<>();
 
         for (int i = 0; i < N; i++) {
             // Tirer une longueur de séquence uniformément
             int seqLength = 1 + random.nextInt(maxLength);
-            //System.out.println(seqLength);
+            // System.out.println(seqLength);
 
             Sequence sequence = new Sequence();
 
@@ -212,7 +294,7 @@ public class TKUSP implements Algorithm {
     }
 
     private Itemset generateItemset(double[][] PM, List<Integer> items,
-                                    int position, DatasetStatistics stats) {
+            int position, DatasetStatistics stats) {
         List<Item> chosenItems = new ArrayList<>();
 
         // Construire d'abord la liste des candidats (comme avant)
@@ -224,7 +306,8 @@ public class TKUSP implements Algorithm {
         }
 
         int maxElemSize = stats.sampleItemsetSize(random);
-        if (maxElemSize <= 0) maxElemSize = 1;
+        if (maxElemSize <= 0)
+            maxElemSize = 1;
 
         // Si plus de candidats que k, faire un Fisher-Yates PARTIEL :
         // pour i in [0..k-1] swap chosenItems[i] avec chosenItems[i + rnd(0..n-i-1)]
@@ -237,7 +320,8 @@ public class TKUSP implements Algorithm {
                 chosenItems.set(i, chosenItems.get(j));
                 chosenItems.set(j, tmp);
             }
-            // Gagner du temps : on ne fait que k swaps (au lieu de n swaps d'un shuffle complet)
+            // Gagner du temps : on ne fait que k swaps (au lieu de n swaps d'un shuffle
+            // complet)
             chosenItems = chosenItems.subList(0, maxElemSize);
         }
 
@@ -277,8 +361,7 @@ public class TKUSP implements Algorithm {
 
         // Min-heap : la plus petite utilité est en tête
         PriorityQueue<Sequence> pq = new PriorityQueue<>(
-                Comparator.comparingInt(Sequence::getUtility)
-        );
+                Comparator.comparingInt(Sequence::getUtility));
 
         // Déduplication par signature (évite d'ajouter la même séquence plusieurs fois)
         Set<String> seen = new HashSet<>();
@@ -346,6 +429,55 @@ public class TKUSP implements Algorithm {
         }
 
         return newPM;
+    }
+
+    /**
+     * Affiche la matrice de probabilité PM de manière formatée.
+     */
+    private void printProbabilityMatrix(double[][] PM, List<Integer> items) {
+        if (PM == null || PM.length == 0) {
+            System.out.println("Matrice PM vide.");
+            return;
+        }
+
+        int numItems = PM.length;
+        int maxLength = PM[0].length;
+
+        System.out.printf("Dimensions: %d items x %d positions\n", numItems, maxLength);
+
+        // Afficher seulement les premières lignes et colonnes si la matrice est grande
+        int maxRowsToShow = Math.min(10, numItems);
+        int maxColsToShow = Math.min(10, maxLength);
+
+        // En-tête avec les positions
+        System.out.print("Item\\Pos\t");
+        for (int j = 0; j < maxColsToShow; j++) {
+            System.out.printf("P%d\t", j);
+        }
+        if (maxColsToShow < maxLength) {
+            System.out.print("...");
+        }
+        System.out.println();
+
+        // Ligne de séparation
+        System.out.println("--------" + "--------".repeat(maxColsToShow));
+
+        // Afficher les lignes
+        for (int i = 0; i < maxRowsToShow; i++) {
+            System.out.printf("Item %d\t", items.get(i));
+            for (int j = 0; j < maxColsToShow; j++) {
+                System.out.printf("%.2f\t", PM[i][j]);
+            }
+            if (maxColsToShow < maxLength) {
+                System.out.print("...");
+            }
+            System.out.println();
+        }
+
+        if (maxRowsToShow < numItems) {
+            System.out.println("...");
+        }
+        System.out.println();
     }
 
     @Override
