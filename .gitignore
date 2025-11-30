@@ -34,3 +34,11 @@ lib/
 ### Output ###
 output/*
 !output/.gitkeep
+
+### JSON files ###
+filesJSON/*
+!filesJSON/.gitkeep
+
+### Exact patterns ###
+output_exacts/*
+!output_exacts/.gitkeep
