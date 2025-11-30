@@ -68,7 +68,7 @@ public class TKUSP implements Algorithm {
         } else if (!singleList.isEmpty())
             currentMinUtil = singleList.get(singleList.size() - 1).getValue();
 
-        System.out.printf("Initial minUtil (from singletons) = %d\n", currentMinUtil);
+        //System.out.printf("Initial minUtil (from singletons) = %d\n", currentMinUtil);
 
         // 8) Pruner les items : reconstruire promising items / index en utilisant
         // currentMinUtil
@@ -92,7 +92,7 @@ public class TKUSP implements Algorithm {
         int iteration = 1;
 
         while (iteration <= config.getMaxIterations() && !isBinaryMatrix(PM)) {
-            System.out.printf("\n--- Iteration %d ---\n", iteration);
+            System.out.printf("\n Iteration %d ", iteration);
 
             // Générer l'échantillon
             List<Sequence> sample = generateSample(
@@ -135,7 +135,7 @@ public class TKUSP implements Algorithm {
             }
 
             if (newMinUtilFromTopK > currentMinUtil) {
-                System.out.printf("TopK increased minUtil: %d -> %d\n", currentMinUtil, newMinUtilFromTopK);
+                //System.out.printf("TopK increased minUtil: %d -> %d\n", currentMinUtil, newMinUtilFromTopK);
                 currentMinUtil = newMinUtilFromTopK;
 
                 // sauvegarder ancien mapping items -> PM (ou juste les items)
