@@ -68,7 +68,8 @@ public class TKUSP implements Algorithm {
         } else if (!singleList.isEmpty())
             currentMinUtil = singleList.get(singleList.size() - 1).getValue();
 
-        //System.out.printf("Initial minUtil (from singletons) = %d\n", currentMinUtil);
+        // System.out.printf("Initial minUtil (from singletons) = %d\n",
+        // currentMinUtil);
 
         // 8) Pruner les items : reconstruire promising items / index en utilisant
         // currentMinUtil
@@ -118,10 +119,13 @@ public class TKUSP implements Algorithm {
 
             // Ajouter ce diagnostic :
             /*
-            int maxEliteLength = elite.stream().mapToInt(Sequence::length).max().orElse(0);
-            int avgEliteLength = (int) elite.stream().mapToInt(Sequence::length).average().orElse(0);
-            System.out.printf("Elite: max_length=%d, avg_length=%d\n", maxEliteLength, avgEliteLength);
-            */
+             * int maxEliteLength =
+             * elite.stream().mapToInt(Sequence::length).max().orElse(0);
+             * int avgEliteLength = (int)
+             * elite.stream().mapToInt(Sequence::length).average().orElse(0);
+             * System.out.printf("Elite: max_length=%d, avg_length=%d\n", maxEliteLength,
+             * avgEliteLength);
+             */
 
             // Mettre à jour top-k
             topK = updateTopK(topK, sample, config.getK());
@@ -135,7 +139,8 @@ public class TKUSP implements Algorithm {
             }
 
             if (newMinUtilFromTopK > currentMinUtil) {
-                //System.out.printf("TopK increased minUtil: %d -> %d\n", currentMinUtil, newMinUtilFromTopK);
+                // System.out.printf("TopK increased minUtil: %d -> %d\n", currentMinUtil,
+                // newMinUtilFromTopK);
                 currentMinUtil = newMinUtilFromTopK;
 
                 // sauvegarder ancien mapping items -> PM (ou juste les items)
@@ -161,18 +166,27 @@ public class TKUSP implements Algorithm {
                 // reconstruire PM en préservant les lignes des items communs ...
                 PM = rebuildProbabilityMatrixPreserving(oldPMForMerge, oldItemsForPM, items,
                         config.getMaxSequenceLength());
+
+                // Filtrer l'élite pour retirer les items qui ne sont plus prometteurs
+                elite = filterEliteSequences(elite, items);
             }
 
             // Mettre à jour la matrice de probabilité
             PM = updateProbabilityMatrix(PM, elite, items);
 
-
             // Afficher la matrice PM après la mise à jour
-            //System.out.println("\n=== Matrice PM après updateProbabilityMatrix (Iteration " + iteration + ") ===");
-            //printProbabilityMatrix(PM, items);
+            // System.out.println("\n=== Matrice PM après updateProbabilityMatrix (Iteration
+            // " + iteration + ") ===");
+            // printProbabilityMatrix(PM, items);
 
             iteration++;
         }
+
+        if (isBinaryMatrix(PM)) {
+            System.out.print("\n ------------------ matrix PM is binary ---------------\n");
+            printProbabilityMatrix(PM, items);
+        }
+
         dataStructures.releasePerSequenceDistinctIds();
         long endTime = System.currentTimeMillis();
         this.runtime = endTime - startTime;
@@ -394,6 +408,42 @@ public class TKUSP implements Algorithm {
         return result;
     }
 
+    /**
+     * Filtre les séquences de l'élite en ne gardant que les items prometteurs.
+     * Retourne une nouvelle liste de séquences filtrées.
+     */
+    private List<Sequence> filterEliteSequences(List<Sequence> elite, List<Integer> promisingItems) {
+        Set<Integer> promisingSet = new HashSet<>(promisingItems);
+        List<Sequence> filteredElite = new ArrayList<>();
+
+        for (Sequence seq : elite) {
+            Sequence filteredSeq = new Sequence();
+            filteredSeq.setUtility(seq.getUtility());
+
+            for (Itemset itemset : seq.getItemsets()) {
+                Itemset filteredItemset = new Itemset();
+
+                for (Item item : itemset.getItems()) {
+                    if (promisingSet.contains(item.getId())) {
+                        filteredItemset.addItem(item);
+                    }
+                }
+
+                // N'ajouter l'itemset que s'il n'est pas vide
+                if (!filteredItemset.isEmpty()) {
+                    filteredSeq.addItemset(filteredItemset);
+                }
+            }
+
+            // N'ajouter la séquence que si elle n'est pas vide
+            if (!filteredSeq.isEmpty()) {
+                filteredElite.add(filteredSeq);
+            }
+        }
+
+        return filteredElite;
+    }
+
     private double[][] updateProbabilityMatrix(double[][] PM, List<Sequence> elite, List<Integer> items) {
         double[][] newPM = new double[PM.length][PM[0].length];
 
@@ -423,7 +473,7 @@ public class TKUSP implements Algorithm {
                 if (total > 0) {
                     newPM[itemIdx][pos] = (double) count / total;
                 } else {
-                    newPM[itemIdx][pos] = PM[itemIdx][pos];
+                    newPM[itemIdx][pos] = 0.0;
                 }
             }
         }
@@ -446,7 +496,7 @@ public class TKUSP implements Algorithm {
         System.out.printf("Dimensions: %d items x %d positions\n", numItems, maxLength);
 
         // Afficher seulement les premières lignes et colonnes si la matrice est grande
-        int maxRowsToShow = Math.min(10, numItems);
+        int maxRowsToShow = Math.min(300, numItems);
         int maxColsToShow = Math.min(10, maxLength);
 
         // En-tête avec les positions
