@@ -35,6 +35,10 @@ lib/
 output/*
 !output/.gitkeep
 
+### Output version 1 ###
+output_v1/*
+!output_v1/.gitkeep
+
 ### JSON files ###
 filesJSON/*
 !filesJSON/.gitkeep
