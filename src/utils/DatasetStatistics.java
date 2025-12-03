@@ -27,8 +27,7 @@ public class DatasetStatistics {
 
                 // Distribution de taille
                 int size = itemset.size();
-                itemsetSizeDistribution.put(size,
-                        itemsetSizeDistribution.getOrDefault(size, 0) + 1);
+                itemsetSizeDistribution.put(size, itemsetSizeDistribution.getOrDefault(size, 0) + 1);
                 itemsetSizes.add(size);
             }
         }

@@ -182,11 +182,6 @@ public class TKUSP implements Algorithm {
             iteration++;
         }
 
-        if (isBinaryMatrix(PM)) {
-            System.out.print("\n ------------------ matrix PM is binary ---------------\n");
-            printProbabilityMatrix(PM, items);
-        }
-
         dataStructures.releasePerSequenceDistinctIds();
         long endTime = System.currentTimeMillis();
         this.runtime = endTime - startTime;

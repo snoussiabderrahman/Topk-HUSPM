@@ -69,9 +69,6 @@ public class TKUSP_V1 implements Algorithm {
         } else if (!singleList.isEmpty())
             currentMinUtil = singleList.get(singleList.size() - 1).getValue();
 
-        // System.out.printf("Initial minUtil (from singletons) = %d\n",
-        // currentMinUtil);
-
         // 8) Pruner les items : reconstruire promising items / index en utilisant
         // currentMinUtil
         dataStructures.updatePromisingItems(currentMinUtil);
@@ -94,18 +91,11 @@ public class TKUSP_V1 implements Algorithm {
 
         dataStructures.printStatistics();
         // --------------------------------------------------------------------------
-        // Early stopping tracking variables
-        int lastKthUtility = 0; // k-th utility from previous iteration
-        int stagnationCounter = 0; // iterations without k-th utility improvement
-        int stabilizationCounter = 0; // iterations with stable PM
-        double[][] previousPM = null; // PM from previous iteration for comparison
-        boolean hasStagnated = false; // flag for stagnation detection
-        boolean hasStabilized = false; // flag for stabilization detection
         List<Sequence> elite = null; // elite from previous iteration for smooth factor
 
         int iteration = 1;
 
-        while (iteration <= config.getMaxIterations() && !isBinaryMatrix(PM) && !hasStagnated && !hasStabilized) {
+        while (iteration <= config.getMaxIterations() && !isBinaryMatrix(PM)) {
             System.out.printf("\n Iteration %d ", iteration);
 
             // Calculate smooth factor from elite (use rho for first iteration)
@@ -137,47 +127,16 @@ public class TKUSP_V1 implements Algorithm {
             int eliteSize = Math.max(1, (int) Math.ceil(config.getRho() * sample.size()));
             elite = sample.subList(0, eliteSize);
 
-            // Ajouter ce diagnostic :
-            /*
-             * int maxEliteLength =
-             * elite.stream().mapToInt(Sequence::length).max().orElse(0);
-             * int avgEliteLength = (int)
-             * elite.stream().mapToInt(Sequence::length).average().orElse(0);
-             * System.out.printf("Elite: max_length=%d, avg_length=%d\n", maxEliteLength,
-             * avgEliteLength);
-             */
-
             // Mettre à jour top-k
             topK = updateTopK(topK, sample, config.getK());
 
-            // ========== STAGNATION DETECTION ==========
-            // Get current k-th utility
-            int currentKthUtility = 0;
-            if (topK.size() >= config.getK()) {
-                currentKthUtility = topK.get(config.getK() - 1).getUtility();
-            } else if (!topK.isEmpty()) {
-                currentKthUtility = topK.get(topK.size() - 1).getUtility();
-            }
-
-            // Check for stagnation (no improvement in k-th utility)
-            if (iteration > 1) { // Skip first iteration
-                if (currentKthUtility > lastKthUtility) {
-                    stagnationCounter = 0; // Reset if improved
-                } else {
-                    stagnationCounter++; // Increment if no improvement
-                    if (stagnationCounter >= config.getStagnationThreshold()) {
-                        hasStagnated = true;
-                        System.out.printf(
-                                "\n[EARLY STOP] Stagnation detected: k-th utility=%d unchanged for %d iterations\n",
-                                currentKthUtility, stagnationCounter);
-                    }
-                }
-            }
-            lastKthUtility = currentKthUtility;
-            // ==========================================
-
             // Mettre à jour currentMinUtil en utilisant le k-ième utilité de topK
-            long newMinUtilFromTopK = currentKthUtility;
+            long newMinUtilFromTopK = 0;
+            if (topK.size() >= config.getK()) {
+                newMinUtilFromTopK = topK.get(config.getK() - 1).getUtility();
+            } else if (!topK.isEmpty()) {
+                newMinUtilFromTopK = topK.get(topK.size() - 1).getUtility();
+            }
 
             if (newMinUtilFromTopK > currentMinUtil) {
                 // System.out.printf("TopK increased minUtil: %d -> %d\n", currentMinUtil,
@@ -213,30 +172,10 @@ public class TKUSP_V1 implements Algorithm {
             }
 
             // Mettre à jour la matrice de probabilité
-            PM = updateProbabilityMatrix(PM, elite, items);
+            PM = updateProbabilityMatrix(PM, elite, items, config);
 
             // Update sequence length probabilities based on elite statistics
-            lengthProbabilities = updateLengthProbabilities(elite, config.getMaxSequenceLength());
-
-            // ========== STABILIZATION DETECTION ==========
-            if (previousPM != null && previousPM.length == PM.length && previousPM[0].length == PM[0].length) {
-                double pmVariation = calculatePMVariation(PM, previousPM);
-
-                if (pmVariation < config.getPmVariationEpsilon()) {
-                    stabilizationCounter++;
-                    if (stabilizationCounter >= config.getStabilizationThreshold()) {
-                        hasStabilized = true;
-                        System.out.printf(
-                                "\n[EARLY STOP] Stabilization detected: PM variation=%.6f < %.6f for %d iterations\n",
-                                pmVariation, config.getPmVariationEpsilon(), stabilizationCounter);
-                    }
-                } else {
-                    stabilizationCounter = 0; // Reset if variation too high
-                }
-            }
-            // Save current PM for next iteration
-            previousPM = copyMatrix(PM);
-            // ============================================
+            lengthProbabilities = updateLengthProbabilities(elite, config.getMaxSequenceLength(), config);
 
             // Afficher la matrice PM après la mise à jour
             // System.out.println("\n=== Matrice PM après updateProbabilityMatrix (Iteration
@@ -245,6 +184,7 @@ public class TKUSP_V1 implements Algorithm {
 
             iteration++;
         }
+
         dataStructures.releasePerSequenceDistinctIds();
         long endTime = System.currentTimeMillis();
         this.runtime = endTime - startTime;
@@ -253,23 +193,7 @@ public class TKUSP_V1 implements Algorithm {
         this.memoryUsage = (memoryAfter - memoryBefore) / (1024.0 * 1024.0);
 
         System.out.println("\n=== Algorithm Completed ===");
-
-        // Determine stopping reason
-        String stoppingReason;
-        if (hasStagnated) {
-            stoppingReason = "Stagnation (k-th utility unchanged for " + stagnationCounter + " iterations)";
-        } else if (hasStabilized) {
-            stoppingReason = "Stabilization (PM variation < epsilon for " + stabilizationCounter + " iterations)";
-        } else if (isBinaryMatrix(PM)) {
-            stoppingReason = "Binary matrix reached";
-        } else {
-            stoppingReason = "Max iterations reached";
-        }
-
-        System.out.printf("Stopping reason: %s\n", stoppingReason);
         System.out.printf("Total iterations: %d\n", iteration - 1);
-        System.out.printf("Stagnation counter: %d/%d\n", stagnationCounter, config.getStagnationThreshold());
-        System.out.printf("Stabilization counter: %d/%d\n", stabilizationCounter, config.getStabilizationThreshold());
         System.out.printf("Runtime: %.2f s\n", this.runtime / 1000.0);
         System.out.printf("Memory: %.2f MB\n", this.memoryUsage);
         UtilityCalculator.printCacheStatistics();
@@ -358,7 +282,7 @@ public class TKUSP_V1 implements Algorithm {
      * p_new(i) = (occ(i) + 1) / (elite_size + max_length_seq)
      * where occ(i) = number of sequences of length i in elite
      */
-    private double[] updateLengthProbabilities(List<Sequence> elite, int maxLength) {
+    private double[] updateLengthProbabilities(List<Sequence> elite, int maxLength, AlgorithmConfig config) {
         int eliteSize = elite.size();
         double[] newProbs = new double[maxLength];
 
@@ -371,10 +295,30 @@ public class TKUSP_V1 implements Algorithm {
             }
         }
 
-        // Calculate p_new(i) = (occ(i) + 1) / (elite_size + max_length_seq)
+        // Calculate frequency in elite (with Laplace smoothing)
         double denominator = eliteSize + maxLength;
+
         for (int i = 0; i < maxLength; i++) {
-            newProbs[i] = (occurrences[i] + 1) / denominator;
+            double frequency = (occurrences[i] + 1) / denominator;
+
+            // 1. Apply Learning Rate (Alpha)
+            // P_new = (1 - alpha) * P_old + alpha * P_elite
+            newProbs[i] = (1.0 - config.getLearningRate()) * lengthProbabilities[i]
+                    + config.getLearningRate() * frequency;
+
+            // 2. Apply Minimum Probability Bound
+            // Ensure at least minProbability (or a small fraction like 0.01) for each length
+            double minLenProb = Math.max(config.getMinProbability(), 0.01);
+            newProbs[i] = Math.max(minLenProb, newProbs[i]);
+        }
+
+        // 3. Renormalize to ensure sum is 1.0
+        double sum = 0.0;
+        for (double p : newProbs)
+            sum += p;
+
+        for (int i = 0; i < maxLength; i++) {
+            newProbs[i] /= sum;
         }
 
         return newProbs;
@@ -491,7 +435,7 @@ public class TKUSP_V1 implements Algorithm {
         for (int i = 0; i < numPMBased; i++) {
             // Sample sequence length from learned distribution
             int seqLength = sampleSequenceLength();
-            // System.out.println(seqLength);
+            //System.out.println(seqLength);
 
             Sequence sequence = new Sequence();
 
@@ -512,8 +456,7 @@ public class TKUSP_V1 implements Algorithm {
         return sample;
     }
 
-    private Itemset generateItemset(double[][] PM, List<Integer> items,
-            int position, DatasetStatistics stats) {
+    private Itemset generateItemset(double[][] PM, List<Integer> items, int position, DatasetStatistics stats) {
         List<Item> chosenItems = new ArrayList<>();
 
         // Construire d'abord la liste des candidats (comme avant)
@@ -539,8 +482,7 @@ public class TKUSP_V1 implements Algorithm {
                 chosenItems.set(i, chosenItems.get(j));
                 chosenItems.set(j, tmp);
             }
-            // Gagner du temps : on ne fait que k swaps (au lieu de n swaps d'un shuffle
-            // complet)
+            // Gagner du temps : on ne fait que k swaps (au lieu de n swaps d'un shuffle complet)
             chosenItems = chosenItems.subList(0, maxElemSize);
         }
 
@@ -649,7 +591,8 @@ public class TKUSP_V1 implements Algorithm {
         return filteredElite;
     }
 
-    private double[][] updateProbabilityMatrix(double[][] PM, List<Sequence> elite, List<Integer> items) {
+    private double[][] updateProbabilityMatrix(double[][] PM, List<Sequence> elite, List<Integer> items,
+            AlgorithmConfig config) {
         double[][] newPM = new double[PM.length][PM[0].length];
 
         for (int itemIdx = 0; itemIdx < items.size(); itemIdx++) {
@@ -675,37 +618,17 @@ public class TKUSP_V1 implements Algorithm {
                 }
 
                 // Calculer la nouvelle probabilité
-                if (total > 0) {
-                    newPM[itemIdx][pos] = (double) count / total;
-                } else {
-                    newPM[itemIdx][pos] = 0.0;
-                }
+                double probability = (total > 0) ? (double) count / total : PM[itemIdx][pos];
+
+                // 1. Application du Learning Rate (Alpha)
+                double newProb = (1.0 - config.getLearningRate()) * PM[itemIdx][pos]
+                        + config.getLearningRate() * probability;
+
+                newPM[itemIdx][pos] = newProb;
             }
         }
 
         return newPM;
-    }
-
-    /**
-     * Calculate the maximum variation between two probability matrices.
-     * Returns the maximum absolute difference |PM[i][j] - previousPM[i][j]|.
-     */
-    private double calculatePMVariation(double[][] PM, double[][] previousPM) {
-        if (PM == null || previousPM == null)
-            return Double.MAX_VALUE;
-        if (PM.length != previousPM.length || PM[0].length != previousPM[0].length)
-            return Double.MAX_VALUE;
-
-        double maxVariation = 0.0;
-
-        for (int i = 0; i < PM.length; i++) {
-            for (int j = 0; j < PM[0].length; j++) {
-                double diff = Math.abs(PM[i][j] - previousPM[i][j]);
-                maxVariation = Math.max(maxVariation, diff);
-            }
-        }
-
-        return maxVariation;
     }
 
     /**

@@ -7,25 +7,25 @@ public class AlgorithmConfig {
     private final int maxIterations; // max_iter
     private final int maxSequenceLength; // max_length_sequence
 
-    // Early stopping parameters
-    private final int stagnationThreshold; // X: iterations without k-th utility improvement
-    private final int stabilizationThreshold; // Y: iterations with stable PM
-    private final double pmVariationEpsilon; // epsilon: threshold for PM variation
+    // Convergence control parameters
+    private final double learningRate; // Alpha: rate of PM update (0.0-1.0)
+    private final double minProbability; // Lower bound for probabilities
+    private final double maxProbability; // Upper bound for probabilities
 
     public AlgorithmConfig(int k, int sampleSize, double rho, int maxIterations, int maxSequenceLength) {
-        this(k, sampleSize, rho, maxIterations, maxSequenceLength, 15, 10, 0.005);
+        this(k, sampleSize, rho, maxIterations, maxSequenceLength, 0.2, 0.05, 0.95);
     }
 
     public AlgorithmConfig(int k, int sampleSize, double rho, int maxIterations, int maxSequenceLength,
-            int stagnationThreshold, int stabilizationThreshold, double pmVariationEpsilon) {
+            double learningRate, double minProbability, double maxProbability) {
         this.k = k;
         this.sampleSize = sampleSize;
         this.rho = rho;
         this.maxIterations = maxIterations;
         this.maxSequenceLength = maxSequenceLength;
-        this.stagnationThreshold = stagnationThreshold;
-        this.stabilizationThreshold = stabilizationThreshold;
-        this.pmVariationEpsilon = pmVariationEpsilon;
+        this.learningRate = learningRate;
+        this.minProbability = minProbability;
+        this.maxProbability = maxProbability;
     }
 
     // Getters
@@ -49,23 +49,23 @@ public class AlgorithmConfig {
         return maxSequenceLength;
     }
 
-    public int getStagnationThreshold() {
-        return stagnationThreshold;
+    public double getLearningRate() {
+        return learningRate;
     }
 
-    public int getStabilizationThreshold() {
-        return stabilizationThreshold;
+    public double getMinProbability() {
+        return minProbability;
     }
 
-    public double getPmVariationEpsilon() {
-        return pmVariationEpsilon;
+    public double getMaxProbability() {
+        return maxProbability;
     }
 
     @Override
     public String toString() {
         return String.format(
-                "Config{k=%d, N=%d, rho=%.2f, max_iter=%d, max_seq_len=%d, stag_thresh=%d, stab_thresh=%d, epsilon=%.4f}",
+                "Config{k=%d, N=%d, rho=%.2f, max_iter=%d, max_seq_len=%d, alpha=%.2f, minP=%.2f, maxP=%.2f}",
                 k, sampleSize, rho, maxIterations, maxSequenceLength,
-                stagnationThreshold, stabilizationThreshold, pmVariationEpsilon);
+                learningRate, minProbability, maxProbability);
     }
 }
