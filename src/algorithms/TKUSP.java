@@ -28,7 +28,7 @@ public class TKUSP implements Algorithm {
         runtime.gc();
         long memoryBefore = runtime.totalMemory() - runtime.freeMemory();
 
-        System.out.println("\n=== Starting TKU-SP Algorithm ===");
+        System.out.println("\n=== Starting " + this.getClass().getSimpleName() + " Algorithm ===");
         System.out.println(config);
 
         // 1) Statistiques dataset

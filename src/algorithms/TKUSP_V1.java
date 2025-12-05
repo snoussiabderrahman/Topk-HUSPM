@@ -29,7 +29,7 @@ public class TKUSP_V1 implements Algorithm {
         runtime.gc();
         long memoryBefore = runtime.totalMemory() - runtime.freeMemory();
 
-        System.out.println("\n=== Starting TKU-SP Algorithm ===");
+        System.out.println("\n=== Starting " + this.getClass().getSimpleName() + " Algorithm ===");
         System.out.println(config);
 
         // 1) Statistiques dataset
@@ -307,7 +307,8 @@ public class TKUSP_V1 implements Algorithm {
                     + config.getLearningRate() * frequency;
 
             // 2. Apply Minimum Probability Bound
-            // Ensure at least minProbability (or a small fraction like 0.01) for each length
+            // Ensure at least minProbability (or a small fraction like 0.01) for each
+            // length
             double minLenProb = Math.max(config.getMinProbability(), 0.01);
             newProbs[i] = Math.max(minLenProb, newProbs[i]);
         }
@@ -435,7 +436,7 @@ public class TKUSP_V1 implements Algorithm {
         for (int i = 0; i < numPMBased; i++) {
             // Sample sequence length from learned distribution
             int seqLength = sampleSequenceLength();
-            //System.out.println(seqLength);
+            // System.out.println(seqLength);
 
             Sequence sequence = new Sequence();
 
@@ -482,7 +483,8 @@ public class TKUSP_V1 implements Algorithm {
                 chosenItems.set(i, chosenItems.get(j));
                 chosenItems.set(j, tmp);
             }
-            // Gagner du temps : on ne fait que k swaps (au lieu de n swaps d'un shuffle complet)
+            // Gagner du temps : on ne fait que k swaps (au lieu de n swaps d'un shuffle
+            // complet)
             chosenItems = chosenItems.subList(0, maxElemSize);
         }
 

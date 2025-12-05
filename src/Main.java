@@ -12,10 +12,10 @@ public class Main {
     public static void main(String[] args) {
         try {
 
-            System.out.println("=== TKU-SP: Top-K Utility Sequential Pattern Mining ===\n");
+            System.out.println("=== TK-HUSPM: Top-K HIGH Utility Sequential Pattern Mining ===\n");
 
             // 1. Lire le dataset
-            String inputPath = "data/SIGN.txt";
+            String inputPath = "data/BIBLE.txt";
             System.out.println("Reading dataset from: " + inputPath);
             Dataset dataset = DatasetReader.readDataset(inputPath);
             System.out.println("Dataset loaded: " + dataset);
@@ -31,7 +31,7 @@ public class Main {
             );
 
             // 3. Exécuter l'algorithme
-            Algorithm algorithm = new TKUSP_V2(42); // seed pour reproductibilité
+            Algorithm algorithm = new TKUSP_V1(42); // seed pour reproductibilité
             List<Sequence> topK = algorithm.run(dataset, config);
 
             // 4. Afficher les résultats

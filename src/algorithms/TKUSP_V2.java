@@ -29,7 +29,7 @@ public class TKUSP_V2 implements Algorithm {
         runtime.gc();
         long memoryBefore = runtime.totalMemory() - runtime.freeMemory();
 
-        System.out.println("\n=== Starting TKU-SP Algorithm ===");
+        System.out.println("\n=== Starting " + this.getClass().getSimpleName() + " Algorithm ===");
         System.out.println(config);
 
         // 1) Statistiques dataset
@@ -180,8 +180,11 @@ public class TKUSP_V2 implements Algorithm {
             lengthProbabilities = updateLengthProbabilities(elite, config.getMaxSequenceLength(), config);
 
             // Afficher la matrice PM après la mise à jour
+            /*
             System.out.println("\n=== Matrice PM après updateProbabilityMatrix (Iteration " + iteration + ") ===");
             printProbabilityMatrix(PM, items);
+
+             */
 
             iteration++;
         }
@@ -198,8 +201,6 @@ public class TKUSP_V2 implements Algorithm {
         System.out.printf("Runtime: %.2f s\n", this.runtime / 1000.0);
         System.out.printf("Memory: %.2f MB\n", this.memoryUsage);
         UtilityCalculator.printCacheStatistics();
-        System.out.printf("Items promissing: %d", dataStructures.getPromisingItems().toArray().length);
-        System.out.printf("\n Items promissing : %s\n", Arrays.toString(dataStructures.getPromisingItems().toArray()));
 
         return topK;
     }
