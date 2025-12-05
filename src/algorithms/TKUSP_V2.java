@@ -428,7 +428,7 @@ public class TKUSP_V2 implements Algorithm {
         // Paramètres de génération
         double fusionRatio = 0.10; // 10% pour fusion-based exploration
         int numFusion = (int) Math.floor(N * fusionRatio);
-        int numRandom = (int) Math.floor((N - numFusion) * smoothFactor);
+        int numRandom = (int) Math.floor(N * smoothFactor);
         int numPMBased = N - numFusion - numRandom;
 
         // 1. Generate fusion-based sequences (exploration via crossover)
