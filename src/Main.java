@@ -1,5 +1,4 @@
-import algorithms.Algorithm;
-import algorithms.TKUSP;
+import algorithms.*;
 import config.AlgorithmConfig;
 import model.Dataset;
 import model.Sequence;
@@ -24,15 +23,15 @@ public class Main {
 
             // 2. Configuration de l'algorithme
             AlgorithmConfig config = new AlgorithmConfig(
-                    10,      // k = 10 (top-10 patterns)
+                    100,      // k = 10 (top-10 patterns)
                     2000,     // N = 2000 (sample size)
-                    0.2,     // rho = 0.2 (20% elite)
-                    500,      // max_iter = 2000
+                    0.3,     // rho = 0.2 (20% elite)
+                    100,      // max_iter = 2000
                     10        // max_length_sequence = 10
             );
 
             // 3. Exécuter l'algorithme
-            Algorithm algorithm = new TKUSP(42); // seed pour reproductibilité
+            Algorithm algorithm = new TKUSP_V2(42); // seed pour reproductibilité
             List<Sequence> topK = algorithm.run(dataset, config);
 
             // 4. Afficher les résultats

@@ -64,7 +64,7 @@ public class DatasetStatistics {
     public void printStatistics() {
         System.out.println("=== Dataset Statistics ===");
         System.out.println("Distinct items: " + distinctItems.size());
-        //System.out.println("Items: " + distinctItems);
+        // System.out.println("Items: " + distinctItems);
         System.out.println("Max sequence length: " + maxSequenceLength);
         System.out.println("\nItemset size distribution:");
 

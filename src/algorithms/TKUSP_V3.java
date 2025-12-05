@@ -8,18 +8,18 @@ import utils.UtilityCalculator;
 
 import java.util.*;
 
-public class TKUSP_V2 implements Algorithm {
+public class TKUSP_V3 implements Algorithm {
     private long runtime;
     private double memoryUsage;
     private final Random random;
     private double[] lengthProbabilities; // p(i) for i in [1..max_length_seq]
     private boolean isSingletonDataset; // true if >95% of itemsets are singletons
 
-    public TKUSP_V2() {
+    public TKUSP_V3() {
         this.random = new Random();
     }
 
-    public TKUSP_V2(long seed) {
+    public TKUSP_V3(long seed) {
         this.random = new Random(seed);
     }
 
