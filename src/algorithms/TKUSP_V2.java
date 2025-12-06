@@ -493,15 +493,6 @@ public class TKUSP_V2 implements Algorithm {
             }
         }
 
-        // Compléter avec topK si nécessaire
-        if (candidates.size() < 10 && topK != null) {
-            for (Sequence seq : topK) {
-                if (seq.length() > 0 && seq.length() <= maxLenForFusion) {
-                    candidates.add(seq);
-                }
-            }
-        }
-
         // Si pas assez de candidats, retourner une liste vide
         if (candidates.size() < 2) {
             return fusionSeqs;
