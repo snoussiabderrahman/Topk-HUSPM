@@ -16,6 +16,9 @@ bin/
 !**/src/main/**/bin/
 !**/src/test/**/bin/
 
+### Java compiled files ###
+*.class
+
 ### NetBeans ###
 /nbproject/private/
 /nbbuild/
