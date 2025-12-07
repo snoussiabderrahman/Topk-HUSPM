@@ -8,16 +8,17 @@ import utils.UtilityCalculator;
 
 import java.util.*;
 
-public class TKUSP implements Algorithm {
+public class TKUSP_V4 implements Algorithm {
     private long runtime;
     private double memoryUsage;
     private final Random random;
+    private double[] lengthProbabilities; // p(i) for i in [1..max_length_seq]
 
-    public TKUSP() {
+    public TKUSP_V4() {
         this.random = new Random();
     }
 
-    public TKUSP(long seed) {
+    public TKUSP_V4(long seed) {
         this.random = new Random(seed);
     }
 
@@ -68,9 +69,6 @@ public class TKUSP implements Algorithm {
         } else if (!singleList.isEmpty())
             currentMinUtil = singleList.get(singleList.size() - 1).getValue();
 
-        // System.out.printf("Initial minUtil (from singletons) = %d\n",
-        // currentMinUtil);
-
         // 8) Pruner les items : reconstruire promising items / index en utilisant
         // currentMinUtil
         dataStructures.updatePromisingItems(currentMinUtil);
@@ -88,20 +86,38 @@ public class TKUSP implements Algorithm {
                 items.size(),
                 config.getMaxSequenceLength());
 
+        // Initialize sequence length probability uniformly
+        lengthProbabilities = initializeLengthProbabilities(config.getMaxSequenceLength());
+
         dataStructures.printStatistics();
         // --------------------------------------------------------------------------
+        List<Sequence> elite = null; // elite from previous iteration for smooth factor
+
+        // Variables pour la détection de convergence
+        int lastKthUtility = (topK.size() >= config.getK()) ? topK.get(config.getK() - 1).getUtility() : 0;
+        int stagnationCounter = 0; // Compteur d'itérations sans amélioration du k-ème pattern
+
         int iteration = 1;
 
         while (iteration <= config.getMaxIterations() && !isBinaryMatrix(PM)) {
             System.out.printf("\n Iteration %d ", iteration);
 
-            // Générer l'échantillon
+            // Calculate smooth factor from elite (use rho for first iteration)
+            double smoothFactor = config.getRho();
+            if (iteration > 1 && elite != null && !elite.isEmpty()) {
+                smoothFactor = calculateSmoothFactor(elite, config.getRho());
+            }
+
+            // Générer l'échantillon avec smoothing mutation et fusion
             List<Sequence> sample = generateSample(
                     PM,
                     config.getSampleSize(),
                     items,
                     stats,
-                    config.getMaxSequenceLength());
+                    config.getMaxSequenceLength(),
+                    smoothFactor,
+                    elite,
+                    topK);
 
             // ===== CALCUL OPTIMISÉ DES UTILITÉS =====
             for (Sequence seq : sample) {
@@ -115,7 +131,7 @@ public class TKUSP implements Algorithm {
 
             // Sélectionner l'élite
             int eliteSize = Math.max(1, (int) Math.ceil(config.getRho() * sample.size()));
-            List<Sequence> elite = sample.subList(0, eliteSize);
+            elite = sample.subList(0, eliteSize);
 
             // Mettre à jour top-k
             topK = updateTopK(topK, sample, config.getK());
@@ -162,12 +178,38 @@ public class TKUSP implements Algorithm {
             }
 
             // Mettre à jour la matrice de probabilité
-            PM = updateProbabilityMatrix(PM, elite, items);
+            double[][] oldPM = copyMatrix(PM);
+            PM = updateProbabilityMatrix(PM, elite, items, config);
+
+            // Update sequence length probabilities based on elite statistics
+            lengthProbabilities = updateLengthProbabilities(elite, config.getMaxSequenceLength(), config);
+
+            // Détecter la stagnation du top-K (k-ème utilité)
+            int currentKthUtility = (topK.size() >= config.getK()) ? topK.get(config.getK() - 1).getUtility() : 0;
+            if (currentKthUtility > lastKthUtility) {
+                lastKthUtility = currentKthUtility;
+                stagnationCounter = 0; // Reset si amélioration
+            } else {
+                stagnationCounter++;
+            }
+
+            // Vérifier les critères de convergence
+            boolean topKStagnated = (stagnationCounter >= config.getMaxStagnationIterations());
+
+            if (topKStagnated) {
+                String reason = String.format("Top-K stagnation (%d iterations)", stagnationCounter);
+                System.out.printf("\n[CONVERGENCE] Early stopping: %s\n", reason);
+                break;
+            }
 
             // Afficher la matrice PM après la mise à jour
-            // System.out.println("\n=== Matrice PM après updateProbabilityMatrix (Iteration
-            // " + iteration + ") ===");
-            // printProbabilityMatrix(PM, items);
+            /*
+             * System.out.
+             * println("\n=== Matrice PM après updateProbabilityMatrix (Iteration " +
+             * iteration + ") ===");
+             * printProbabilityMatrix(PM, items);
+             * 
+             */
 
             iteration++;
         }
@@ -253,6 +295,84 @@ public class TKUSP implements Algorithm {
         return PM;
     }
 
+    /**
+     * Initialize sequence length probabilities uniformly.
+     * p(i) = 1 / max_length_seq for all i in [1..max_length_seq]
+     */
+    private double[] initializeLengthProbabilities(int maxLength) {
+        double[] probs = new double[maxLength];
+        double uniformProb = 1.0 / maxLength;
+        Arrays.fill(probs, uniformProb);
+        return probs;
+    }
+
+    /**
+     * Update sequence length probabilities based on elite statistics.
+     * p_new(i) = (occ(i) + 1) / (elite_size + max_length_seq)
+     * where occ(i) = number of sequences of length i in elite
+     */
+    private double[] updateLengthProbabilities(List<Sequence> elite, int maxLength, AlgorithmConfig config) {
+        int eliteSize = elite.size();
+        double[] newProbs = new double[maxLength];
+
+        // Count occurrences of each length in elite
+        int[] occurrences = new int[maxLength];
+        for (Sequence seq : elite) {
+            int len = seq.length();
+            if (len >= 1 && len <= maxLength) {
+                occurrences[len - 1]++; // length i maps to index i-1
+            }
+        }
+
+        // Calculate frequency in elite (with Laplace smoothing)
+        double denominator = eliteSize + maxLength;
+
+        for (int i = 0; i < maxLength; i++) {
+            double frequency = (occurrences[i] + 1) / denominator;
+
+            // 1. Apply Learning Rate (Alpha)
+            // P_new = (1 - alpha) * P_old + alpha * P_elite
+            newProbs[i] = (1.0 - config.getLearningRate()) * lengthProbabilities[i]
+                    + config.getLearningRate() * frequency;
+
+            // 2. Apply Minimum Probability Bound
+            // Ensure at least minProbability (or a small fraction like 0.01) for each
+            // length
+            double minLenProb = Math.max(config.getMinProbability(), 0.01);
+            newProbs[i] = Math.max(minLenProb, newProbs[i]);
+        }
+
+        // 3. Renormalize to ensure sum is 1.0
+        double sum = 0.0;
+        for (double p : newProbs)
+            sum += p;
+
+        for (int i = 0; i < maxLength; i++) {
+            newProbs[i] /= sum;
+        }
+
+        return newProbs;
+    }
+
+    /**
+     * Sample a sequence length from the current probability distribution.
+     * Uses cumulative distribution function for sampling.
+     */
+    private int sampleSequenceLength() {
+        double r = random.nextDouble();
+        double cumulative = 0.0;
+
+        for (int i = 0; i < lengthProbabilities.length; i++) {
+            cumulative += lengthProbabilities[i];
+            if (r <= cumulative) {
+                return i + 1; // length = index + 1
+            }
+        }
+
+        // Fallback to last length (should rarely happen due to rounding)
+        return lengthProbabilities.length;
+    }
+
     private boolean isBinaryMatrix(double[][] PM) {
         for (double[] row : PM) {
             for (double val : row) {
@@ -264,13 +384,96 @@ public class TKUSP implements Algorithm {
         return true;
     }
 
+    /**
+     * Calculate smooth factor α based on elite diversity.
+     * α = [(u_best − u_quantile) / u_best] × ρ
+     */
+    private double calculateSmoothFactor(List<Sequence> elite, double rho) {
+        if (elite == null || elite.isEmpty())
+            return rho;
+
+        int eliteSize = elite.size();
+        int quantileIdx = (int) Math.floor(eliteSize * rho);
+        if (quantileIdx >= eliteSize)
+            quantileIdx = eliteSize - 1;
+
+        int uBest = elite.get(0).getUtility(); // elite is sorted descending
+        int uQuantile = elite.get(quantileIdx).getUtility();
+
+        if (uBest == 0)
+            return rho; // avoid division by zero
+
+        double alpha = ((double) (uBest - uQuantile) / uBest) * rho;
+        return Math.max(0.0, Math.min(alpha, 1.0)); // clamp to [0,1]
+    }
+
+    /**
+     * Generate a completely random sequence for exploration.
+     * Uses uniform random length and random items from promising items.
+     */
+    private Sequence generateRandomSequence(int maxLength, List<Integer> items,
+            DatasetStatistics stats) {
+        // Random sequence length (uniform for true exploration)
+        int seqLength = 1 + random.nextInt(maxLength);
+
+        Sequence sequence = new Sequence();
+
+        for (int pos = 0; pos < seqLength; pos++) {
+            // Random itemset size from dataset distribution
+            int itemsetSize = stats.sampleItemsetSize(random);
+            if (itemsetSize <= 0)
+                itemsetSize = 1;
+
+            // Random items from promising items
+            List<Item> chosenItems = new ArrayList<>();
+            int maxAttempts = Math.min(itemsetSize, items.size());
+
+            Set<Integer> selectedIds = new HashSet<>();
+            for (int i = 0; i < maxAttempts; i++) {
+                int randomIdx = random.nextInt(items.size());
+                int itemId = items.get(randomIdx);
+                if (selectedIds.add(itemId)) {
+                    chosenItems.add(new Item(itemId));
+                }
+            }
+
+            if (!chosenItems.isEmpty()) {
+                sequence.addItemset(new Itemset(chosenItems));
+            }
+        }
+
+        return sequence;
+    }
+
     private List<Sequence> generateSample(double[][] PM, int N, List<Integer> items,
-            DatasetStatistics stats, int maxLength) {
+            DatasetStatistics stats, int maxLength, double smoothFactor,
+            List<Sequence> elite, List<Sequence> topK) {
         List<Sequence> sample = new ArrayList<>();
 
-        for (int i = 0; i < N; i++) {
-            // Tirer une longueur de séquence uniformément
-            int seqLength = 1 + random.nextInt(maxLength);
+        // Paramètres de génération
+        double fusionRatio = 0.10; // 10% pour fusion-based exploration
+        int numFusion = (int) Math.floor(N * fusionRatio);
+        int numRandom = (int) Math.floor(N * smoothFactor);
+        int numPMBased = N - numFusion - numRandom;
+
+        // 1. Generate fusion-based sequences (exploration via crossover)
+        if (numFusion > 0 && elite != null && !elite.isEmpty()) {
+            List<Sequence> fusionSeqs = generateFusionSequences(elite, topK, numFusion, maxLength);
+            sample.addAll(fusionSeqs);
+        }
+
+        // 2. Generate random sequences (exploration)
+        for (int i = 0; i < numRandom; i++) {
+            Sequence seq = generateRandomSequence(maxLength, items, stats);
+            if (!seq.isEmpty()) {
+                sample.add(seq);
+            }
+        }
+
+        // 3. Generate PM-based sequences (exploitation)
+        for (int i = 0; i < numPMBased; i++) {
+            // Sample sequence length from learned distribution
+            int seqLength = sampleSequenceLength();
             // System.out.println(seqLength);
 
             Sequence sequence = new Sequence();
@@ -292,8 +495,109 @@ public class TKUSP implements Algorithm {
         return sample;
     }
 
-    private Itemset generateItemset(double[][] PM, List<Integer> items,
-            int position, DatasetStatistics stats) {
+    /**
+     * Génère des séquences par fusion (crossover) de deux séquences existantes.
+     * Sélectionne des séquences de taille < maxLength/2 et les fusionne dans les
+     * deux ordres.
+     */
+    private List<Sequence> generateFusionSequences(List<Sequence> elite, List<Sequence> topK,
+            int numFusion, int maxLength) {
+        List<Sequence> fusionSeqs = new ArrayList<>();
+        Set<String> signatures = new HashSet<>(); // Pour éviter les doublons
+
+        // Collecter les candidats: séquences de longueur <= maxLength/2
+        List<Sequence> candidates = new ArrayList<>();
+        int maxLenForFusion = maxLength / 2;
+
+        // Ajouter d'abord les séquences de l'élite
+        if (elite != null) {
+            for (Sequence seq : elite) {
+                if (seq.length() > 0 && seq.length() <= maxLenForFusion) {
+                    candidates.add(seq);
+                }
+            }
+        }
+
+        // Si pas assez de candidats, retourner une liste vide
+        if (candidates.size() < 2) {
+            return fusionSeqs;
+        }
+
+        // Générer les fusions
+        int attempts = 0;
+        int maxAttempts = numFusion * 3; // Éviter boucle infinie
+
+        while (fusionSeqs.size() < numFusion && attempts < maxAttempts) {
+            attempts++;
+
+            // Sélectionner deux séquences aléatoires
+            int idx1 = random.nextInt(candidates.size());
+            int idx2 = random.nextInt(candidates.size());
+
+            if (idx1 == idx2 && candidates.size() > 1) {
+                continue; // Éviter de fusionner une séquence avec elle-même
+            }
+
+            Sequence s1 = candidates.get(idx1);
+            Sequence s2 = candidates.get(idx2);
+
+            // Vérifier que la fusion ne dépasse pas maxLength
+            if (s1.length() + s2.length() > maxLength) {
+                continue;
+            }
+
+            // Fusion dans les deux ordres: s1+s2 et s2+s1
+            Sequence fusion1 = fuseSequences(s1, s2);
+            Sequence fusion2 = fuseSequences(s2, s1);
+
+            // Ajouter fusion1 si non dupliquée
+            if (!fusion1.isEmpty()) {
+                String sig1 = fusion1.getSignature();
+                if (signatures.add(sig1)) {
+                    fusionSeqs.add(fusion1);
+                }
+            }
+
+            // Ajouter fusion2 si non dupliquée et différente de fusion1
+            if (fusionSeqs.size() < numFusion && !fusion2.isEmpty()) {
+                String sig2 = fusion2.getSignature();
+                if (signatures.add(sig2)) {
+                    fusionSeqs.add(fusion2);
+                }
+            }
+        }
+
+        return fusionSeqs;
+    }
+
+    /**
+     * Fusionne deux séquences en concaténant leurs itemsets.
+     */
+    private Sequence fuseSequences(Sequence s1, Sequence s2) {
+        Sequence fused = new Sequence();
+
+        // Copier tous les itemsets de s1
+        for (Itemset itemset : s1.getItemsets()) {
+            Itemset copy = new Itemset();
+            for (Item item : itemset.getItems()) {
+                copy.addItem(new Item(item.getId()));
+            }
+            fused.addItemset(copy);
+        }
+
+        // Copier tous les itemsets de s2
+        for (Itemset itemset : s2.getItemsets()) {
+            Itemset copy = new Itemset();
+            for (Item item : itemset.getItems()) {
+                copy.addItem(new Item(item.getId()));
+            }
+            fused.addItemset(copy);
+        }
+
+        return fused;
+    }
+
+    private Itemset generateItemset(double[][] PM, List<Integer> items, int position, DatasetStatistics stats) {
         List<Item> chosenItems = new ArrayList<>();
 
         // Construire d'abord la liste des candidats (comme avant)
@@ -328,6 +632,7 @@ public class TKUSP implements Algorithm {
         if (chosenItems.isEmpty()) {
             chosenItems.add(fallbackItem(PM, items, position));
         }
+        // System.out.printf(" size itemset = %d ",chosenItems.size());
 
         return new Itemset(chosenItems);
     }
@@ -429,7 +734,8 @@ public class TKUSP implements Algorithm {
         return filteredElite;
     }
 
-    private double[][] updateProbabilityMatrix(double[][] PM, List<Sequence> elite, List<Integer> items) {
+    private double[][] updateProbabilityMatrix(double[][] PM, List<Sequence> elite, List<Integer> items,
+            AlgorithmConfig config) {
         double[][] newPM = new double[PM.length][PM[0].length];
 
         for (int itemIdx = 0; itemIdx < items.size(); itemIdx++) {
@@ -455,15 +761,41 @@ public class TKUSP implements Algorithm {
                 }
 
                 // Calculer la nouvelle probabilité
-                if (total > 0) {
-                    newPM[itemIdx][pos] = (double) count / total;
-                } else {
-                    newPM[itemIdx][pos] = 0.0;
-                }
+                double probability = (total > 0) ? (double) count / total : PM[itemIdx][pos];
+
+                // 1. Application du Learning Rate (Alpha)
+                double newProb = (1.0 - config.getLearningRate()) * PM[itemIdx][pos]
+                        + config.getLearningRate() * probability;
+
+                newPM[itemIdx][pos] = newProb;
             }
         }
 
         return newPM;
+    }
+
+    /**
+     * Calcule la variation maximale entre deux matrices PM.
+     * Retourne max|PM_old[i][j] - PM_new[i][j]| pour tous i, j.
+     */
+    private double calculatePMVariation(double[][] oldPM, double[][] newPM) {
+        if (oldPM == null || newPM == null ||
+                oldPM.length != newPM.length ||
+                oldPM[0].length != newPM[0].length) {
+            return Double.MAX_VALUE; // Matrices incompatibles
+        }
+
+        double maxVariation = 0.0;
+        for (int i = 0; i < oldPM.length; i++) {
+            for (int j = 0; j < oldPM[0].length; j++) {
+                double diff = Math.abs(oldPM[i][j] - newPM[i][j]);
+                if (diff > maxVariation) {
+                    maxVariation = diff;
+                }
+            }
+        }
+
+        return maxVariation;
     }
 
     /**
@@ -481,7 +813,7 @@ public class TKUSP implements Algorithm {
         System.out.printf("Dimensions: %d items x %d positions\n", numItems, maxLength);
 
         // Afficher seulement les premières lignes et colonnes si la matrice est grande
-        int maxRowsToShow = Math.min(300, numItems);
+        int maxRowsToShow = Math.min(10, numItems);
         int maxColsToShow = Math.min(10, maxLength);
 
         // En-tête avec les positions

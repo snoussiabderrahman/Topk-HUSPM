@@ -13,8 +13,8 @@ import java.util.Map;
 /**
  * Runner CLI:
  * - Version selection: -V <num> ou -v <num>
- *     0 -> TKUSP
- *     1 -> TKUSP_V1
+ * 0 -> TKUSP
+ * 1 -> TKUSP_V1
  * - Si --algo <ClassName> est fourni, il prend la priorité.
  * - Seed par défaut = 42 (si non fourni avec -s ou --seed).
  */
@@ -24,8 +24,8 @@ public class Main {
             Map<String, String> opts = parseArgs(args);
 
             // paramètres principaux (valeurs par défaut)
-            String datasetPath = opts.getOrDefault("dataset", "data/SIGN.txt");
-            int k = parseInt(opts.get("k"), 100);
+            String datasetPath = opts.getOrDefault("dataset", "data/Kosarak10k.txt");
+            int k = parseInt(opts.get("k"), 20);
             int N = parseInt(opts.get("N"), 2000);
             double rho = parseDouble(opts.get("rho"), 0.3);
             int maxIter = parseInt(opts.get("maxIter"), 100);
@@ -48,7 +48,7 @@ public class Main {
                 if ("0".equals(v)) {
                     algoClass = "TKUSP";
                 } else if ("1".equals(v)) {
-                    algoClass = "TKUSP_V1";
+                    algoClass = "TKUSP_V2";
                 } else {
                     System.err.println(
                             "Version inconnue '" + v + "'. Utilisation de TKUSP_V1 par défaut.");
@@ -56,7 +56,7 @@ public class Main {
                 }
             } else {
                 // par défaut
-                algoClass = "TKUSP_V1";
+                algoClass = "TKUSP_V2";
             }
 
             // Construire la configuration
@@ -65,7 +65,8 @@ public class Main {
                 double alpha = parseDouble(alphaS, 0.2);
                 double minP = parseDouble(minPS, 0.05);
                 double maxP = parseDouble(maxPS, 0.95);
-                config = new AlgorithmConfig(k, N, rho, maxIter, maxLen, alpha, minP, maxP);
+                // Utiliser les valeurs par défaut pour les paramètres de convergence
+                config = new AlgorithmConfig(k, N, rho, maxIter, maxLen, alpha, minP, maxP, 10, 5, 0.01);
             } else {
                 config = new AlgorithmConfig(k, N, rho, maxIter, maxLen);
             }
@@ -86,10 +87,11 @@ public class Main {
             System.out.println("Algorithm: " + algorithm.getName());
             System.out.printf("Top-K patterns found: %d%n", topK.size());
 
-            String outputPath = opts.getOrDefault("output", "output/SIGN.txt");
+            String outputPath = opts.getOrDefault("output", "output/Kosarak10k.txt");
             File outFile = new File(outputPath);
             File parent = outFile.getParentFile();
-            if (parent != null) parent.mkdirs();
+            if (parent != null)
+                parent.mkdirs();
 
             OutputWriter.writeResults(topK, outputPath, algorithm.getRuntime(),
                     algorithm.getMemoryUsage());
@@ -133,7 +135,8 @@ public class Main {
                 } else {
                     String key = a.substring(2);
                     String val = (i + 1 < args.length && !args[i + 1].startsWith("-"))
-                            ? args[++i] : "true";
+                            ? args[++i]
+                            : "true";
                     map.put(key, val);
                 }
             } else if (a.startsWith("-")) {
@@ -141,7 +144,8 @@ public class Main {
                     char c = a.charAt(1);
                     String key = shortOptToKey(c);
                     String val = (i + 1 < args.length && !args[i + 1].startsWith("-"))
-                            ? args[++i] : "true";
+                            ? args[++i]
+                            : "true";
                     map.put(key, val);
                 } else {
                     // ex: -V1 ou -d/path (valeur collée)
@@ -185,17 +189,32 @@ public class Main {
     }
 
     private static int parseInt(String s, int def) {
-        if (s == null) return def;
-        try { return Integer.parseInt(s); } catch (Exception e) { return def; }
+        if (s == null)
+            return def;
+        try {
+            return Integer.parseInt(s);
+        } catch (Exception e) {
+            return def;
+        }
     }
 
     private static long parseLong(String s, long def) {
-        if (s == null) return def;
-        try { return Long.parseLong(s); } catch (Exception e) { return def; }
+        if (s == null)
+            return def;
+        try {
+            return Long.parseLong(s);
+        } catch (Exception e) {
+            return def;
+        }
     }
 
     private static double parseDouble(String s, double def) {
-        if (s == null) return def;
-        try { return Double.parseDouble(s); } catch (Exception e) { return def; }
+        if (s == null)
+            return def;
+        try {
+            return Double.parseDouble(s);
+        } catch (Exception e) {
+            return def;
+        }
     }
 }
