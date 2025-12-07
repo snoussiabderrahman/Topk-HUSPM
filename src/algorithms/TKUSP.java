@@ -164,11 +164,6 @@ public class TKUSP implements Algorithm {
             // Mettre à jour la matrice de probabilité
             PM = updateProbabilityMatrix(PM, elite, items);
 
-            // Afficher la matrice PM après la mise à jour
-            // System.out.println("\n=== Matrice PM après updateProbabilityMatrix (Iteration
-            // " + iteration + ") ===");
-            // printProbabilityMatrix(PM, items);
-
             iteration++;
         }
 
