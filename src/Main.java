@@ -52,11 +52,11 @@ public class Main {
                 } else {
                     System.err.println(
                             "Version inconnue '" + v + "'. Utilisation de TKUSP_V1 par défaut.");
-                    algoClass = "TKUSP_V1";
+                    algoClass = "TKUSP_V2";
                 }
             } else {
                 // par défaut
-                algoClass = "TKUSP_V2";
+                algoClass = "TKUSP_V4";
             }
 
             // Construire la configuration

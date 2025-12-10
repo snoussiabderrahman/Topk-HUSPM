@@ -196,7 +196,7 @@ public class TKUSP_V4 implements Algorithm {
             // Vérifier les critères de convergence
             boolean topKStagnated = (stagnationCounter >= config.getMaxStagnationIterations());
 
-            if (topKStagnated) {
+            if (topKStagnated && smoothFactor < 0.1) {
                 String reason = String.format("Top-K stagnation (%d iterations)", stagnationCounter);
                 System.out.printf("\n[CONVERGENCE] Early stopping: %s\n", reason);
                 break;

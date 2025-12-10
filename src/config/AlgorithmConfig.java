@@ -18,7 +18,7 @@ public class AlgorithmConfig {
     private final double pmStabilizationThreshold; // eps: threshold for PM stability
 
     public AlgorithmConfig(int k, int sampleSize, double rho, int maxIterations, int maxSequenceLength) {
-        this(k, sampleSize, rho, maxIterations, maxSequenceLength, 0.2, 0.05, 0.95, 20, 5, 0.01);
+        this(k, sampleSize, rho, maxIterations, maxSequenceLength, 0.2, 0.05, 0.95, 5, 5, 0.01);
     }
 
     public AlgorithmConfig(int k, int sampleSize, double rho, int maxIterations, int maxSequenceLength,
