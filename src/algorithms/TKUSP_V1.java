@@ -34,7 +34,6 @@ public class TKUSP_V1 implements Algorithm {
 
         // 1) Statistiques dataset
         DatasetStatistics stats = new DatasetStatistics(dataset);
-        stats.printStatistics();
 
         // 2) INITIALISER dataStructures AVANT toute utilisation !
         long currentMinUtil = 0L; // ou valeur d'init voulue
@@ -306,11 +305,6 @@ public class TKUSP_V1 implements Algorithm {
             newProbs[i] = (1.0 - config.getLearningRate()) * lengthProbabilities[i]
                     + config.getLearningRate() * frequency;
 
-            // 2. Apply Minimum Probability Bound
-            // Ensure at least minProbability (or a small fraction like 0.01) for each
-            // length
-            double minLenProb = Math.max(config.getMinProbability(), 0.01);
-            newProbs[i] = Math.max(minLenProb, newProbs[i]);
         }
 
         // 3. Renormalize to ensure sum is 1.0

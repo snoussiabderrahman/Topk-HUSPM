@@ -24,8 +24,8 @@ public class Main {
             Map<String, String> opts = parseArgs(args);
 
             // paramètres principaux (valeurs par défaut)
-            String datasetPath = opts.getOrDefault("dataset", "data/Kosarak10k.txt");
-            int k = parseInt(opts.get("k"), 20);
+            String datasetPath = opts.getOrDefault("dataset", "data/BIBLE.txt");
+            int k = parseInt(opts.get("k"), 100);
             int N = parseInt(opts.get("N"), 2000);
             double rho = parseDouble(opts.get("rho"), 0.3);
             int maxIter = parseInt(opts.get("maxIter"), 100);
@@ -33,8 +33,6 @@ public class Main {
 
             // learning rate / bounds (optionnel)
             String alphaS = opts.get("alpha");
-            String minPS = opts.get("minP");
-            String maxPS = opts.get("maxP");
 
             // seed: DEFAULT = 42 si non fourni
             long seed = parseLong(opts.get("seed"), 42L);
@@ -61,21 +59,13 @@ public class Main {
 
             // Construire la configuration
             AlgorithmConfig config;
-            if (alphaS != null || minPS != null || maxPS != null) {
-                double alpha = parseDouble(alphaS, 0.2);
-                double minP = parseDouble(minPS, 0.05);
-                double maxP = parseDouble(maxPS, 0.95);
+            if (alphaS != null) {
+                double alpha = parseDouble(alphaS, 0.5);
                 // Utiliser les valeurs par défaut pour les paramètres de convergence
-                config = new AlgorithmConfig(k, N, rho, maxIter, maxLen, alpha, minP, maxP, 10, 5, 0.01);
+                config = new AlgorithmConfig(k, N, rho, maxIter, maxLen, alpha, 10);
             } else {
                 config = new AlgorithmConfig(k, N, rho, maxIter, maxLen);
             }
-
-            System.out.println("=== TK-HUSPM runner ===");
-            System.out.println("Algorithm class: " + algoClass);
-            System.out.println("Dataset: " + datasetPath);
-            System.out.println("Config: " + config);
-            System.out.println("Seed: " + seed);
 
             Dataset dataset = DatasetReader.readDataset(datasetPath);
 
@@ -83,11 +73,16 @@ public class Main {
 
             List<Sequence> topK = algorithm.run(dataset, config);
 
-            System.out.println("\n=== Results ===");
-            System.out.println("Algorithm: " + algorithm.getName());
-            System.out.printf("Top-K patterns found: %d%n", topK.size());
+            // Extract dataset name from path
+            String datasetName = new File(datasetPath).getName().replace(".txt", "");
 
-            String outputPath = opts.getOrDefault("output", "output/Kosarak10k.txt");
+            System.out.println("======== DB : " + datasetName + " ========");
+            System.out.println("✅ k = " + config.getK());
+            System.out.printf("Runtime = %.2f s\n", algorithm.getRuntime() / 1000.0);
+            System.out.printf("memory = %.2f MB\n", algorithm.getMemoryUsage());
+            System.out.println("================================");
+
+            String outputPath = opts.getOrDefault("output", "output/BIBLE.txt");
             File outFile = new File(outputPath);
             File parent = outFile.getParentFile();
             if (parent != null)
@@ -95,7 +90,7 @@ public class Main {
 
             OutputWriter.writeResults(topK, outputPath, algorithm.getRuntime(),
                     algorithm.getMemoryUsage());
-            System.out.println("Results saved to: " + outputPath);
+            // System.out.println("Results saved to: " + outputPath);
 
         } catch (Exception e) {
             System.err.println("Error: " + e.getMessage());

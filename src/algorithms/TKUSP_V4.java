@@ -29,12 +29,14 @@ public class TKUSP_V4 implements Algorithm {
         runtime.gc();
         long memoryBefore = runtime.totalMemory() - runtime.freeMemory();
 
+        // ⭐ INITIALISER L'INDEX COMPACT AU DÉBUT
+        UtilityCalculator.initializeCompactIndex(dataset);
+
         System.out.println("\n=== Starting " + this.getClass().getSimpleName() + " Algorithm ===");
         System.out.println(config);
 
         // 1) Statistiques dataset
         DatasetStatistics stats = new DatasetStatistics(dataset);
-        stats.printStatistics();
 
         // 2) INITIALISER dataStructures AVANT toute utilisation !
         long currentMinUtil = 0L; // ou valeur d'init voulue
@@ -92,10 +94,6 @@ public class TKUSP_V4 implements Algorithm {
         dataStructures.printStatistics();
         // --------------------------------------------------------------------------
         List<Sequence> elite = null; // elite from previous iteration for smooth factor
-
-        // Variables pour la détection de convergence
-        int lastKthUtility = (topK.size() >= config.getK()) ? topK.get(config.getK() - 1).getUtility() : 0;
-        int stagnationCounter = 0; // Compteur d'itérations sans amélioration du k-ème pattern
 
         int iteration = 1;
 
@@ -178,29 +176,10 @@ public class TKUSP_V4 implements Algorithm {
             }
 
             // Mettre à jour la matrice de probabilité
-            double[][] oldPM = copyMatrix(PM);
             PM = updateProbabilityMatrix(PM, elite, items, config);
 
             // Update sequence length probabilities based on elite statistics
             lengthProbabilities = updateLengthProbabilities(elite, config.getMaxSequenceLength(), config);
-
-            // Détecter la stagnation du top-K (k-ème utilité)
-            int currentKthUtility = (topK.size() >= config.getK()) ? topK.get(config.getK() - 1).getUtility() : 0;
-            if (currentKthUtility > lastKthUtility) {
-                lastKthUtility = currentKthUtility;
-                stagnationCounter = 0; // Reset si amélioration
-            } else {
-                stagnationCounter++;
-            }
-
-            // Vérifier les critères de convergence
-            boolean topKStagnated = (stagnationCounter >= config.getMaxStagnationIterations());
-
-            if (topKStagnated && smoothFactor < 0.1) {
-                String reason = String.format("Top-K stagnation (%d iterations)", stagnationCounter);
-                System.out.printf("\n[CONVERGENCE] Early stopping: %s\n", reason);
-                break;
-            }
 
             // Afficher la matrice PM après la mise à jour
             /*
@@ -208,7 +187,7 @@ public class TKUSP_V4 implements Algorithm {
              * println("\n=== Matrice PM après updateProbabilityMatrix (Iteration " +
              * iteration + ") ===");
              * printProbabilityMatrix(PM, items);
-             * 
+             *
              */
 
             iteration++;
@@ -335,11 +314,6 @@ public class TKUSP_V4 implements Algorithm {
             newProbs[i] = (1.0 - config.getLearningRate()) * lengthProbabilities[i]
                     + config.getLearningRate() * frequency;
 
-            // 2. Apply Minimum Probability Bound
-            // Ensure at least minProbability (or a small fraction like 0.01) for each
-            // length
-            double minLenProb = Math.max(config.getMinProbability(), 0.01);
-            newProbs[i] = Math.max(minLenProb, newProbs[i]);
         }
 
         // 3. Renormalize to ensure sum is 1.0
@@ -412,7 +386,7 @@ public class TKUSP_V4 implements Algorithm {
      * Uses uniform random length and random items from promising items.
      */
     private Sequence generateRandomSequence(int maxLength, List<Integer> items,
-            DatasetStatistics stats) {
+                                            DatasetStatistics stats) {
         // Random sequence length (uniform for true exploration)
         int seqLength = 1 + random.nextInt(maxLength);
 
@@ -446,8 +420,8 @@ public class TKUSP_V4 implements Algorithm {
     }
 
     private List<Sequence> generateSample(double[][] PM, int N, List<Integer> items,
-            DatasetStatistics stats, int maxLength, double smoothFactor,
-            List<Sequence> elite, List<Sequence> topK) {
+                                          DatasetStatistics stats, int maxLength, double smoothFactor,
+                                          List<Sequence> elite, List<Sequence> topK) {
         List<Sequence> sample = new ArrayList<>();
 
         // Paramètres de génération
@@ -501,7 +475,7 @@ public class TKUSP_V4 implements Algorithm {
      * deux ordres.
      */
     private List<Sequence> generateFusionSequences(List<Sequence> elite, List<Sequence> topK,
-            int numFusion, int maxLength) {
+                                                   int numFusion, int maxLength) {
         List<Sequence> fusionSeqs = new ArrayList<>();
         Set<String> signatures = new HashSet<>(); // Pour éviter les doublons
 
@@ -735,7 +709,7 @@ public class TKUSP_V4 implements Algorithm {
     }
 
     private double[][] updateProbabilityMatrix(double[][] PM, List<Sequence> elite, List<Integer> items,
-            AlgorithmConfig config) {
+                                               AlgorithmConfig config) {
         double[][] newPM = new double[PM.length][PM[0].length];
 
         for (int itemIdx = 0; itemIdx < items.size(); itemIdx++) {
@@ -772,30 +746,6 @@ public class TKUSP_V4 implements Algorithm {
         }
 
         return newPM;
-    }
-
-    /**
-     * Calcule la variation maximale entre deux matrices PM.
-     * Retourne max|PM_old[i][j] - PM_new[i][j]| pour tous i, j.
-     */
-    private double calculatePMVariation(double[][] oldPM, double[][] newPM) {
-        if (oldPM == null || newPM == null ||
-                oldPM.length != newPM.length ||
-                oldPM[0].length != newPM[0].length) {
-            return Double.MAX_VALUE; // Matrices incompatibles
-        }
-
-        double maxVariation = 0.0;
-        for (int i = 0; i < oldPM.length; i++) {
-            for (int j = 0; j < oldPM[0].length; j++) {
-                double diff = Math.abs(oldPM[i][j] - newPM[i][j]);
-                if (diff > maxVariation) {
-                    maxVariation = diff;
-                }
-            }
-        }
-
-        return maxVariation;
     }
 
     /**

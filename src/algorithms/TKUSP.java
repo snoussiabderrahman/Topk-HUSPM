@@ -33,7 +33,6 @@ public class TKUSP implements Algorithm {
 
         // 1) Statistiques dataset
         DatasetStatistics stats = new DatasetStatistics(dataset);
-        stats.printStatistics();
 
         // 2) INITIALISER dataStructures AVANT toute utilisation !
         long currentMinUtil = 0L; // ou valeur d'init voulue
