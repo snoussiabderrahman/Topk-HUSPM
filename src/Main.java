@@ -24,7 +24,7 @@ public class Main {
             Map<String, String> opts = parseArgs(args);
 
             // paramètres principaux (valeurs par défaut)
-            String datasetPath = opts.getOrDefault("dataset", "data/BIBLE.txt");
+            String datasetPath = opts.getOrDefault("dataset", "data/SIGN.txt");
             int k = parseInt(opts.get("k"), 100);
             int N = parseInt(opts.get("N"), 2000);
             double rho = parseDouble(opts.get("rho"), 0.3);
@@ -54,7 +54,7 @@ public class Main {
                 }
             } else {
                 // par défaut
-                algoClass = "TKUSP_V4";
+                algoClass = "TKUSP_V2";
             }
 
             // Construire la configuration
@@ -82,7 +82,7 @@ public class Main {
             System.out.printf("memory = %.2f MB\n", algorithm.getMemoryUsage());
             System.out.println("================================");
 
-            String outputPath = opts.getOrDefault("output", "output/BIBLE.txt");
+            String outputPath = opts.getOrDefault("output", "output/SIGN.txt");
             File outFile = new File(outputPath);
             File parent = outFile.getParentFile();
             if (parent != null)

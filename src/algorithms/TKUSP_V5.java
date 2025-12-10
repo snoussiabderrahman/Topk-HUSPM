@@ -8,17 +8,24 @@ import utils.UtilityCalculator;
 
 import java.util.*;
 
-public class TKUSP_V4 implements Algorithm {
+public class TKUSP_V5 implements Algorithm {
     private long runtime;
     private double memoryUsage;
     private final Random random;
     private double[] lengthProbabilities; // p(i) for i in [1..max_length_seq]
 
-    public TKUSP_V4() {
+    /**
+     * ⚡ STRUCTURE POUR GÉNÉRATION RAPIDE DEPUIS PM
+     * Précalcule les CDF (Cumulative Distribution Function) pour chaque position
+     */
+    private double[][] cumulativePM; // CDF pour sampling rapide
+    private boolean cdfNeedsUpdate = true;
+
+    public TKUSP_V5() {
         this.random = new Random();
     }
 
-    public TKUSP_V4(long seed) {
+    public TKUSP_V5(long seed) {
         this.random = new Random(seed);
     }
 
@@ -91,7 +98,7 @@ public class TKUSP_V4 implements Algorithm {
         // Initialize sequence length probability uniformly
         lengthProbabilities = initializeLengthProbabilities(config.getMaxSequenceLength());
 
-        dataStructures.printStatistics();
+        //dataStructures.printStatistics();
         // --------------------------------------------------------------------------
         List<Sequence> elite = null; // elite from previous iteration for smooth factor
 
@@ -449,12 +456,11 @@ public class TKUSP_V4 implements Algorithm {
             // Sample sequence length from learned distribution
             int seqLength = sampleSequenceLength();
             // System.out.println(seqLength);
-
             Sequence sequence = new Sequence();
 
             for (int pos = 0; pos < seqLength; pos++) {
                 // Générer un itemset pour cette position
-                Itemset itemset = generateItemset(PM, items, pos, stats);
+                Itemset itemset = generateItemsetOptimized(PM, items, pos, stats);
 
                 if (!itemset.isEmpty()) {
                     sequence.addItemset(itemset);
@@ -745,7 +751,102 @@ public class TKUSP_V4 implements Algorithm {
             }
         }
 
+        // ⚡ MARQUER CDF POUR MISE À JOUR
+        cdfNeedsUpdate = true;
+
         return newPM;
+    }
+
+    /**
+     * ⚡ PRÉCALCUL DES CDF (appelé après chaque mise à jour de PM)
+     */
+    private void updateCumulativePM(double[][] PM) {
+        int numItems = PM.length;
+        int maxLength = PM[0].length;
+
+        cumulativePM = new double[maxLength][numItems];
+
+        for (int pos = 0; pos < maxLength; pos++) {
+            double sum = 0.0;
+            for (int i = 0; i < numItems; i++) {
+                sum += PM[i][pos];
+                cumulativePM[pos][i] = sum;
+            }
+        }
+
+        cdfNeedsUpdate = false;
+    }
+
+    /**
+     * ⚡ GÉNÉRATION D'ITEMSET OPTIMISÉE
+     *
+     * ALGORITHME :
+     * 1. Tirer un nombre k (taille d'itemset) depuis la distribution empirique
+     * 2. Pour chaque item, faire un sampling biaisé avec recherche binaire dans CDF
+     *
+     * COMPLEXITÉ : O(k × log(|items|)) au lieu de O(|items|)
+     */
+    private Itemset generateItemsetOptimized(double[][] PM, List<Integer> items,
+                                             int position, DatasetStatistics stats) {
+
+        // ⚡ PRÉCALCUL CDF SI NÉCESSAIRE
+        if (cdfNeedsUpdate) {
+            updateCumulativePM(PM);
+        }
+
+        // Échantillonner la taille d'itemset
+        int targetSize = stats.sampleItemsetSize(random);
+        if (targetSize <= 0) targetSize = 1;
+
+        List<Item> chosenItems = new ArrayList<>();
+        Set<Integer> alreadyChosen = new HashSet<>();
+
+        // ⚡ GÉNÉRATION AVEC RECHERCHE BINAIRE (O(log n) par item)
+        double totalProb = cumulativePM[position][items.size() - 1];
+
+        int attempts = 0;
+        while (chosenItems.size() < targetSize && attempts < targetSize * 3) {
+            attempts++;
+
+            // Tirer un nombre aléatoire [0, totalProb]
+            double r = random.nextDouble() * totalProb;
+
+            // ⚡ RECHERCHE BINAIRE dans le CDF
+            int itemIdx = binarySearchCDF(cumulativePM[position], r, items.size());
+
+            if (itemIdx >= 0 && itemIdx < items.size()) {
+                int itemId = items.get(itemIdx);
+
+                if (alreadyChosen.add(itemId)) { // Éviter doublons
+                    chosenItems.add(new Item(itemId));
+                }
+            }
+        }
+
+        // Fallback si aucun item sélectionné
+        if (chosenItems.isEmpty()) {
+            chosenItems.add(fallbackItem(PM, items, position));
+        }
+
+        return new Itemset(chosenItems);
+    }
+
+    /**
+     * ⚡ RECHERCHE BINAIRE dans le CDF
+     */
+    private int binarySearchCDF(double[] cdf, double target, int size) {
+        int left = 0, right = size - 1;
+
+        while (left < right) {
+            int mid = (left + right) / 2;
+            if (cdf[mid] < target) {
+                left = mid + 1;
+            } else {
+                right = mid;
+            }
+        }
+
+        return left;
     }
 
     /**
