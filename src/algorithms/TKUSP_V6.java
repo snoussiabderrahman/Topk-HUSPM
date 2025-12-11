@@ -39,9 +39,6 @@ public class TKUSP_V6 implements Algorithm {
         // ⭐ INITIALISER L'INDEX COMPACT AU DÉBUT
         UtilityCalculator.initializeCompactIndex(dataset);
 
-        //System.out.println("\n=== Starting " + this.getClass().getSimpleName() + " Algorithm ===");
-        //System.out.println(config);
-
         // 1) Statistiques dataset
         DatasetStatistics stats = new DatasetStatistics(dataset);
 
@@ -105,7 +102,7 @@ public class TKUSP_V6 implements Algorithm {
         int iteration = 1;
 
         while (iteration <= config.getMaxIterations() && !isBinaryMatrix(PM)) {
-            System.out.printf("\n Iteration %d ", iteration);
+            //System.out.printf("\n Iteration %d ", iteration);
 
             // Calculate smooth factor from elite (use rho for first iteration)
             double smoothFactor = config.getRho();
@@ -213,12 +210,13 @@ public class TKUSP_V6 implements Algorithm {
 
         long memoryAfter = runtime.totalMemory() - runtime.freeMemory();
         this.memoryUsage = (memoryAfter - memoryBefore) / (1024.0 * 1024.0);
-
+        /*
         System.out.println("\n=== Algorithm Completed ===");
         System.out.printf("Total iterations: %d\n", iteration - 1);
         System.out.printf("Runtime: %.2f s\n", this.runtime / 1000.0);
         System.out.printf("Memory: %.2f MB\n", this.memoryUsage);
         UtilityCalculator.printCacheStatistics();
+         */
 
         return topK;
     }
@@ -328,6 +326,11 @@ public class TKUSP_V6 implements Algorithm {
             newProbs[i] = (1.0 - config.getLearningRate()) * lengthProbabilities[i]
                     + config.getLearningRate() * frequency;
 
+            // 2. Apply Minimum Probability Bound
+            // Ensure at least minProbability (or a small fraction like 0.01) for each
+            // length
+            //double minLenProb = Math.max(config.getMinProbability(), 0.01);
+            newProbs[i] = Math.max(0.05, newProbs[i]);
         }
 
         // 3. Renormalize to ensure sum is 1.0

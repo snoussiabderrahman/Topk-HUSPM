@@ -320,6 +320,13 @@ public class TKUSP_V3 implements Algorithm {
             // P_new = (1 - alpha) * P_old + alpha * P_elite
             newProbs[i] = (1.0 - config.getLearningRate()) * lengthProbabilities[i]
                     + config.getLearningRate() * frequency;
+            // 2. Apply Minimum Probability Bound
+            // Ensure at least minProbability (or a small fraction like 0.01) for each
+            // length
+            //double minLenProb = Math.max(config.getMinProbability(), 0.01);
+            newProbs[i] = Math.max(0.05, newProbs[i]);
+
+
         }
 
         // 3. Renormalize to ensure sum is 1.0

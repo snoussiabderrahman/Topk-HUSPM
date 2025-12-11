@@ -135,7 +135,6 @@ public class IncrementalCache {
     public synchronized void clear() {
         cache.clear();
         accessOrder.clear();
-        System.out.println("🗑️  Incremental cache cleared");
     }
 
     /**
@@ -194,14 +193,15 @@ public class IncrementalCache {
         double incRate = totalCalc > 0 ? (100.0 * incrementalCalculations / totalCalc) : 0;
 
         System.out.println("\n╔════════════════════════════════════════════════╗");
-        System.out.println("║     INCREMENTAL CACHE STATISTICS              ║");
-        System.out.println("╠════════════════════════════════════════════════╣");
-        System.out.printf("║ Cache Size      : %8d / %8d           ║\n", cache.size(), maxSize);
-        System.out.printf("║ Cache Hits      : %8d (%.1f%%)              ║\n", hits, hitRate);
-        System.out.printf("║ Cache Misses    : %8d                       ║\n", misses);
-        System.out.printf("║ Incremental     : %8d (%.1f%%)              ║\n", incrementalCalculations, incRate);
-        System.out.printf("║ Full Calculation: %8d                       ║\n", fullCalculations);
-        System.out.println("╚════════════════════════════════════════════════╝\n");
+        System.out.println(  "║     INCREMENTAL CACHE STATISTICS               ║");
+        System.out.println(  "╠════════════════════════════════════════════════╣");
+        System.out.printf(   "║ Cache Size      : %8d / %8d          ║\n", cache.size(), maxSize);
+        System.out.printf(   "║ Cache Hits      : %8d (%.1f%%)              ║\n", hits, hitRate);
+        System.out.printf(   "║ Cache Misses    : %8d                     ║\n", misses);
+        System.out.printf(   "║ Incremental     : %8d (%.1f%%)              ║\n", incrementalCalculations, incRate);
+        System.out.printf(   "║ Full Calculation: %8d                     ║\n", fullCalculations);
+        System.out.println(  "╚════════════════════════════════════════════════╝\n");
+
     }
 
     public synchronized double getHitRate() {

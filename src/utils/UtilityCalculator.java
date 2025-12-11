@@ -23,13 +23,13 @@ public class UtilityCalculator {
     // ========== INITIALISATION ==========
 
     public static void initializeCompactIndex(Dataset dataset) {
-        System.out.println("🔧 Building compact sequence index...");
+        //System.out.println("🔧 Building compact sequence index...");
         long start = System.currentTimeMillis();
 
         compactIndex = new CompactSequenceIndex(dataset);
 
         long elapsed = System.currentTimeMillis() - start;
-        System.out.printf("✅ Compact index built in %.2f seconds\n", elapsed / 1000.0);
+        //System.out.printf("✅ Compact index built in %.2f seconds\n", elapsed / 1000.0);
     }
 
     /**
@@ -170,9 +170,11 @@ public class UtilityCalculator {
     }
 
     public static void printCacheStatistics() {
+
         System.out.println("\n╔════════════════════════════════════════════════╗");
-        System.out.println("║         UTILITY CALCULATOR STATISTICS         ║");
-        System.out.println("╚════════════════════════════════════════════════╝");
+        System.out.println(  "║         UTILITY CALCULATOR STATISTICS          ║");
+        System.out.println(  "╚════════════════════════════════════════════════╝");
+
 
         cache.printStatistics();
         incrementalCache.printStatistics();

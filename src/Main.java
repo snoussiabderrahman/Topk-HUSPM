@@ -26,7 +26,7 @@ public class Main {
             Map<String, String> opts = parseArgs(args);
 
             // paramètres principaux (valeurs par défaut)
-            String datasetPath = opts.getOrDefault("dataset", "data/SIGN.txt");
+            String datasetPath = opts.getOrDefault("dataset", "data/BIBLE.txt");
             int k = parseInt(opts.get("k"), 100);
             int N = parseInt(opts.get("N"), 2000);
             double rho = parseDouble(opts.get("rho"), 0.3);
@@ -70,7 +70,7 @@ public class Main {
             // Construire la configuration
             AlgorithmConfig config;
             if (alphaS != null) {
-                double alpha = parseDouble(alphaS, 0.2);
+                double alpha = parseDouble(alphaS, 0.5);
                 // Utiliser les valeurs par défaut pour les paramètres de convergence
                 // ⭐ CRÉER CONFIG AVEC PARAMÈTRES ADAPTATIFS
                 config = new AlgorithmConfig(

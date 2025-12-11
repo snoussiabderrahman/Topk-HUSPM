@@ -184,7 +184,7 @@ public class TKUSP_V2 implements Algorithm {
              * println("\n=== Matrice PM après updateProbabilityMatrix (Iteration " +
              * iteration + ") ===");
              * printProbabilityMatrix(PM, items);
-             * 
+             *
              */
 
             iteration++;
@@ -196,12 +196,13 @@ public class TKUSP_V2 implements Algorithm {
 
         long memoryAfter = runtime.totalMemory() - runtime.freeMemory();
         this.memoryUsage = (memoryAfter - memoryBefore) / (1024.0 * 1024.0);
-
+        /*
         System.out.println("\n=== Algorithm Completed ===");
         System.out.printf("Total iterations: %d\n", iteration - 1);
         System.out.printf("Runtime: %.2f s\n", this.runtime / 1000.0);
         System.out.printf("Memory: %.2f MB\n", this.memoryUsage);
         UtilityCalculator.printCacheStatistics();
+         */
 
         return topK;
     }
@@ -310,7 +311,20 @@ public class TKUSP_V2 implements Algorithm {
             // P_new = (1 - alpha) * P_old + alpha * P_elite
             newProbs[i] = (1.0 - config.getLearningRate()) * lengthProbabilities[i]
                     + config.getLearningRate() * frequency;
+            // 2. Apply Minimum Probability Bound
+            // Ensure at least minProbability (or a small fraction like 0.01) for each
+            // length
+            //double minLenProb = Math.max(config.getMinProbability(), 0.01);
+            newProbs[i] = Math.max(0.05, newProbs[i]);
+        }
 
+        // 3. Renormalize to ensure sum is 1.0
+        double sum = 0.0;
+        for (double p : newProbs)
+            sum += p;
+
+        for (int i = 0; i < maxLength; i++) {
+            newProbs[i] /= sum;
         }
 
         return newProbs;
@@ -374,7 +388,7 @@ public class TKUSP_V2 implements Algorithm {
      * Uses uniform random length and random items from promising items.
      */
     private Sequence generateRandomSequence(int maxLength, List<Integer> items,
-            DatasetStatistics stats) {
+                                            DatasetStatistics stats) {
         // Random sequence length (uniform for true exploration)
         int seqLength = 1 + random.nextInt(maxLength);
 
@@ -408,8 +422,8 @@ public class TKUSP_V2 implements Algorithm {
     }
 
     private List<Sequence> generateSample(double[][] PM, int N, List<Integer> items,
-            DatasetStatistics stats, int maxLength, double smoothFactor,
-            List<Sequence> elite, List<Sequence> topK) {
+                                          DatasetStatistics stats, int maxLength, double smoothFactor,
+                                          List<Sequence> elite, List<Sequence> topK) {
         List<Sequence> sample = new ArrayList<>();
 
         // Paramètres de génération
@@ -463,7 +477,7 @@ public class TKUSP_V2 implements Algorithm {
      * deux ordres.
      */
     private List<Sequence> generateFusionSequences(List<Sequence> elite, List<Sequence> topK,
-            int numFusion, int maxLength) {
+                                                   int numFusion, int maxLength) {
         List<Sequence> fusionSeqs = new ArrayList<>();
         Set<String> signatures = new HashSet<>(); // Pour éviter les doublons
 
@@ -697,7 +711,7 @@ public class TKUSP_V2 implements Algorithm {
     }
 
     private double[][] updateProbabilityMatrix(double[][] PM, List<Sequence> elite, List<Integer> items,
-            AlgorithmConfig config) {
+                                               AlgorithmConfig config) {
         double[][] newPM = new double[PM.length][PM[0].length];
 
         for (int itemIdx = 0; itemIdx < items.size(); itemIdx++) {

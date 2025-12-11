@@ -190,12 +190,13 @@ public class TKUSP_V1 implements Algorithm {
 
         long memoryAfter = runtime.totalMemory() - runtime.freeMemory();
         this.memoryUsage = (memoryAfter - memoryBefore) / (1024.0 * 1024.0);
-
+        /*
         System.out.println("\n=== Algorithm Completed ===");
         System.out.printf("Total iterations: %d\n", iteration - 1);
         System.out.printf("Runtime: %.2f s\n", this.runtime / 1000.0);
         System.out.printf("Memory: %.2f MB\n", this.memoryUsage);
         UtilityCalculator.printCacheStatistics();
+         */
 
         return topK;
     }
