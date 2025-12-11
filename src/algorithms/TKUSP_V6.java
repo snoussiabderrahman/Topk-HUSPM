@@ -39,9 +39,6 @@ public class TKUSP_V6 implements Algorithm {
         // ⭐ INITIALISER L'INDEX COMPACT AU DÉBUT
         UtilityCalculator.initializeCompactIndex(dataset);
 
-        // ⚡ ACTIVER LE MODE INCRÉMENTAL
-        UtilityCalculator.enableIncrementalMode();
-
         //System.out.println("\n=== Starting " + this.getClass().getSimpleName() + " Algorithm ===");
         //System.out.println(config);
 
@@ -886,9 +883,7 @@ public class TKUSP_V6 implements Algorithm {
             }
         }
 
-        System.out.printf("✂️ Pruned %d / %d items (%.1f%%)\n",
-                prunedCount, items.size(),
-                100.0 * prunedCount / items.size());
+        //System.out.printf("✂️ Pruned %d / %d items (%.1f%%)\n", prunedCount, items.size(), 100.0 * prunedCount / items.size());
 
         // ⚡ MARQUER CDF POUR MISE À JOUR
         cdfNeedsUpdate = true;

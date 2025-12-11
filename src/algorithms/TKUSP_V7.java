@@ -8,17 +8,25 @@ import utils.UtilityCalculator;
 
 import java.util.*;
 
-public class TKUSP_V4 implements Algorithm {
+public class TKUSP_V7 implements Algorithm {
     private long runtime;
     private double memoryUsage;
     private final Random random;
     private double[] lengthProbabilities; // p(i) for i in [1..max_length_seq]
 
-    public TKUSP_V4() {
+    /**
+     * ⚡ STRUCTURE POUR GÉNÉRATION RAPIDE DEPUIS PM
+     * Précalcule les CDF (Cumulative Distribution Function) pour chaque position
+     */
+    private double[][] cumulativePM; // CDF pour sampling rapide
+    private boolean cdfNeedsUpdate = true;
+    private int stagnationCounter = 0; // ⚡ Compteur de stagnation pour minUtility
+
+    public TKUSP_V7() {
         this.random = new Random();
     }
 
-    public TKUSP_V4(long seed) {
+    public TKUSP_V7(long seed) {
         this.random = new Random(seed);
     }
 
@@ -92,7 +100,7 @@ public class TKUSP_V4 implements Algorithm {
         // Initialize sequence length probability uniformly
         lengthProbabilities = initializeLengthProbabilities(config.getMaxSequenceLength());
 
-        dataStructures.printStatistics();
+        // dataStructures.printStatistics();
         // --------------------------------------------------------------------------
         List<Sequence> elite = null; // elite from previous iteration for smooth factor
 
@@ -108,7 +116,7 @@ public class TKUSP_V4 implements Algorithm {
             }
 
             // Générer l'échantillon avec smoothing mutation et fusion
-            List<Sequence> sample = generateSample(
+            List<Sequence> sample = generateSampleAdaptive(
                     PM,
                     config.getSampleSize(),
                     items,
@@ -116,7 +124,8 @@ public class TKUSP_V4 implements Algorithm {
                     config.getMaxSequenceLength(),
                     smoothFactor,
                     elite,
-                    topK);
+                    topK,
+                    iteration);
 
             // ===== CALCUL OPTIMISÉ DES UTILITÉS =====
             for (Sequence seq : sample) {
@@ -147,6 +156,7 @@ public class TKUSP_V4 implements Algorithm {
                 // System.out.printf("TopK increased minUtil: %d -> %d\n", currentMinUtil,
                 // newMinUtilFromTopK);
                 currentMinUtil = newMinUtilFromTopK;
+                stagnationCounter = 0; // ⚡ Reset stagnation counter
 
                 // sauvegarder ancien mapping items -> PM (ou juste les items)
                 List<Integer> oldItemsForPM = new ArrayList<>(items);
@@ -154,6 +164,10 @@ public class TKUSP_V4 implements Algorithm {
 
                 // pruning
                 dataStructures.updatePromisingItems(currentMinUtil);
+
+                // ⚡ PRUNING DANS PM
+                pruneNonPromisingItemsInPM(PM, items, dataStructures, currentMinUtil);
+
                 dataStructures.releaseNonPromisingDistinctIds();
 
                 // nouvelle liste d'items prometteurs
@@ -174,6 +188,8 @@ public class TKUSP_V4 implements Algorithm {
 
                 // Filtrer l'élite pour retirer les items qui ne sont plus prometteurs
                 elite = filterEliteSequences(elite, items);
+            } else {
+                stagnationCounter++; // ⚡ Increment stagnation counter
             }
 
             // Mettre à jour la matrice de probabilité
@@ -193,6 +209,9 @@ public class TKUSP_V4 implements Algorithm {
 
             iteration++;
         }
+
+        // ⚡ AFFICHER LES STATISTIQUES À LA FIN
+        UtilityCalculator.printCacheStatistics();
 
         dataStructures.releasePerSequenceDistinctIds();
         long endTime = System.currentTimeMillis();
@@ -420,54 +439,88 @@ public class TKUSP_V4 implements Algorithm {
         return sequence;
     }
 
-    private List<Sequence> generateSample(double[][] PM, int N, List<Integer> items,
+    /**
+     * ⚡ GÉNÉRATION ADAPTATIVE (Early Stopping & Reduced Sampling)
+     */
+    private List<Sequence> generateSampleAdaptive(double[][] PM, int N, List<Integer> items,
             DatasetStatistics stats, int maxLength, double smoothFactor,
-            List<Sequence> elite, List<Sequence> topK) {
-        List<Sequence> sample = new ArrayList<>();
+            List<Sequence> elite, List<Sequence> topK, int iteration) {
 
-        // Paramètres de génération
-        double fusionRatio = 0.10; // 10% pour fusion-based exploration
-        int numFusion = (int) Math.floor(N * fusionRatio);
-        int numRandom = (int) Math.floor(N * smoothFactor);
-        int numPMBased = N - numFusion - numRandom;
+        List<Sequence> sample = new ArrayList<>();
+        Set<String> signatures = new HashSet<>();
+
+        int targetSize = N;
+
+        // ⚡ RÉDUIRE N SI minUtility EST STABLE
+        if (iteration > 10 && stagnationCounter > 3) {
+            targetSize = N / 2; // Générer moins de candidats si convergence
+            //System.out.println("📉 Reducing sample size to " + targetSize + " (convergence detected)");
+        }
 
         // 1. Generate fusion-based sequences (exploration via crossover)
+        double fusionRatio = 0.10;
+        int numFusion = (int) Math.floor(targetSize * fusionRatio);
         if (numFusion > 0 && elite != null && !elite.isEmpty()) {
             List<Sequence> fusionSeqs = generateFusionSequences(elite, topK, numFusion, maxLength);
-            sample.addAll(fusionSeqs);
+            for (Sequence seq : fusionSeqs) {
+                if (signatures.add(seq.getSignature())) {
+                    sample.add(seq);
+                }
+            }
         }
 
         // 2. Generate random sequences (exploration)
+        int numRandom = (int) Math.floor(targetSize * smoothFactor);
         for (int i = 0; i < numRandom; i++) {
             Sequence seq = generateRandomSequence(maxLength, items, stats);
-            if (!seq.isEmpty()) {
+            if (!seq.isEmpty() && signatures.add(seq.getSignature())) {
                 sample.add(seq);
             }
         }
 
-        // 3. Generate PM-based sequences (exploitation)
-        for (int i = 0; i < numPMBased; i++) {
-            // Sample sequence length from learned distribution
-            int seqLength = sampleSequenceLength();
-            // System.out.println(seqLength);
+        int uniqueCount = sample.size();
+        int attempts = 0;
+        int maxAttempts = targetSize * 3;
 
-            Sequence sequence = new Sequence();
+        // 3. Generate PM-based sequences (exploitation) with Early Stopping
+        while (uniqueCount < targetSize && attempts < maxAttempts) {
+            attempts++;
 
-            for (int pos = 0; pos < seqLength; pos++) {
-                // Générer un itemset pour cette position
-                Itemset itemset = generateItemset(PM, items, pos, stats);
+            Sequence seq = generateSequenceFromPM(PM, items, stats, maxLength);
 
-                if (!itemset.isEmpty()) {
-                    sequence.addItemset(itemset);
+            if (!seq.isEmpty()) {
+                String sig = seq.getSignature();
+                if (signatures.add(sig)) { // Nouvelle séquence unique
+                    sample.add(seq);
+                    uniqueCount++;
                 }
             }
 
-            if (!sequence.isEmpty()) {
-                sample.add(sequence);
+            // ⚡ EARLY STOPPING : Si diversité suffisante
+            if (uniqueCount >= targetSize * 0.8 && signatures.size() > targetSize * 0.9) {
+                // System.out.println("✅ Early stopping: sufficient diversity achieved");
+                break;
             }
         }
 
         return sample;
+    }
+
+    private Sequence generateSequenceFromPM(double[][] PM, List<Integer> items, DatasetStatistics stats,
+            int maxLength) {
+        // Sample sequence length from learned distribution
+        int seqLength = sampleSequenceLength();
+        Sequence sequence = new Sequence();
+
+        for (int pos = 0; pos < seqLength; pos++) {
+            // Générer un itemset pour cette position
+            Itemset itemset = generateItemsetOptimized(PM, items, pos, stats);
+
+            if (!itemset.isEmpty()) {
+                sequence.addItemset(itemset);
+            }
+        }
+        return sequence;
     }
 
     /**
@@ -746,7 +799,137 @@ public class TKUSP_V4 implements Algorithm {
             }
         }
 
+        // ⚡ MARQUER CDF POUR MISE À JOUR
+        cdfNeedsUpdate = true;
+
         return newPM;
+    }
+
+    /**
+     * ⚡ PRÉCALCUL DES CDF (appelé après chaque mise à jour de PM)
+     */
+    private void updateCumulativePM(double[][] PM) {
+        int numItems = PM.length;
+        int maxLength = PM[0].length;
+
+        cumulativePM = new double[maxLength][numItems];
+
+        for (int pos = 0; pos < maxLength; pos++) {
+            double sum = 0.0;
+            for (int i = 0; i < numItems; i++) {
+                sum += PM[i][pos];
+                cumulativePM[pos][i] = sum;
+            }
+        }
+
+        cdfNeedsUpdate = false;
+    }
+
+    /**
+     * ⚡ GÉNÉRATION D'ITEMSET OPTIMISÉE
+     *
+     * ALGORITHME :
+     * 1. Tirer un nombre k (taille d'itemset) depuis la distribution empirique
+     * 2. Pour chaque item, faire un sampling biaisé avec recherche binaire dans CDF
+     *
+     * COMPLEXITÉ : O(k × log(|items|)) au lieu de O(|items|)
+     */
+    private Itemset generateItemsetOptimized(double[][] PM, List<Integer> items,
+            int position, DatasetStatistics stats) {
+
+        // ⚡ PRÉCALCUL CDF SI NÉCESSAIRE
+        if (cdfNeedsUpdate) {
+            updateCumulativePM(PM);
+        }
+
+        // Échantillonner la taille d'itemset
+        int targetSize = stats.sampleItemsetSize(random);
+        if (targetSize <= 0)
+            targetSize = 1;
+
+        List<Item> chosenItems = new ArrayList<>();
+        Set<Integer> alreadyChosen = new HashSet<>();
+
+        // ⚡ GÉNÉRATION AVEC RECHERCHE BINAIRE (O(log n) par item)
+        double totalProb = cumulativePM[position][items.size() - 1];
+
+        int attempts = 0;
+        while (chosenItems.size() < targetSize && attempts < targetSize * 3) {
+            attempts++;
+
+            // Tirer un nombre aléatoire [0, totalProb]
+            double r = random.nextDouble() * totalProb;
+
+            // ⚡ RECHERCHE BINAIRE dans le CDF
+            int itemIdx = binarySearchCDF(cumulativePM[position], r, items.size());
+
+            if (itemIdx >= 0 && itemIdx < items.size()) {
+                int itemId = items.get(itemIdx);
+
+                if (alreadyChosen.add(itemId)) { // Éviter doublons
+                    chosenItems.add(new Item(itemId));
+                }
+            }
+        }
+
+        // Fallback si aucun item sélectionné
+        if (chosenItems.isEmpty()) {
+            chosenItems.add(fallbackItem(PM, items, position));
+        }
+
+        return new Itemset(chosenItems);
+    }
+
+    /**
+     * ⚡ RECHERCHE BINAIRE dans le CDF
+     */
+    private int binarySearchCDF(double[] cdf, double target, int size) {
+        int left = 0, right = size - 1;
+
+        while (left < right) {
+            int mid = (left + right) / 2;
+            if (cdf[mid] < target) {
+                left = mid + 1;
+            } else {
+                right = mid;
+            }
+        }
+
+        return left;
+    }
+
+    /**
+     * ⚡ ÉLAGAGE DES ITEMS NON PROMETTEURS DANS PM
+     * Inspiré de IIP (Irrelevant Items Pruning) de HUSP-SP
+     *
+     * ALGORITHME :
+     * 1. Pour chaque item i, calculer RSU (Reduced Sequence Utility)
+     * 2. Si RSU(i) < currentMinUtil, mettre PM[i][*] = 0 (ignorer cet item)
+     */
+    private void pruneNonPromisingItemsInPM(double[][] PM, List<Integer> items,
+            OptimizedDataStructures dataStructures,
+            long currentMinUtil) {
+
+        // System.out.println("🔍 Pruning non-promising items in PM (IIP strategy)...");
+        int prunedCount = 0;
+
+        for (int itemIdx = 0; itemIdx < items.size(); itemIdx++) {
+            int itemId = items.get(itemIdx);
+            long swu = dataStructures.getSWU(itemId);
+
+            // ⚡ SI SWU < minUtil, cet item ne peut PAS contribuer à un top-k pattern
+            if (swu < currentMinUtil) {
+                // Mettre toutes les probabilités à 0
+                Arrays.fill(PM[itemIdx], 0.0);
+                prunedCount++;
+            }
+        }
+
+        // System.out.printf("✂️ Pruned %d / %d items (%.1f%%)\n", prunedCount,
+        // items.size(), 100.0 * prunedCount / items.size());
+
+        // ⚡ MARQUER CDF POUR MISE À JOUR
+        cdfNeedsUpdate = true;
     }
 
     /**

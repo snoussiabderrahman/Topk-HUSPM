@@ -10,6 +10,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static java.lang.Boolean.parseBoolean;
+
 /**
  * Runner CLI:
  * - Version selection: -V <num> ou -v <num>
@@ -37,6 +39,12 @@ public class Main {
             // seed: DEFAULT = 42 si non fourni
             long seed = parseLong(opts.get("seed"), 42L);
 
+            // ⭐ NOUVEAUX PARAMÈTRES ADAPTATIFS (optionnels)
+            boolean enableAdaptive = parseBoolean(opts.get("adaptive"));
+            double minDiversity = parseDouble(opts.get("minDiv"), 0.7);
+            double reductionFactor = parseDouble(opts.get("reduction"), 0.5);
+            int warmup = parseInt(opts.get("warmup"), 10);
+
             // Déterminer la classe de l'algorithme
             String algoClass;
             if (opts.containsKey("algo")) {
@@ -47,6 +55,8 @@ public class Main {
                     algoClass = "TKUSP";
                 } else if ("1".equals(v)) {
                     algoClass = "TKUSP_V2";
+                } else if ("7".equals(v)) {
+                    algoClass = "TKUSP_V7";
                 } else {
                     System.err.println(
                             "Version inconnue '" + v + "'. Utilisation de TKUSP_V1 par défaut.");
@@ -54,15 +64,19 @@ public class Main {
                 }
             } else {
                 // par défaut
-                algoClass = "TKUSP_V2";
+                algoClass = "TKUSP_V7";
             }
 
             // Construire la configuration
             AlgorithmConfig config;
             if (alphaS != null) {
-                double alpha = parseDouble(alphaS, 0.5);
+                double alpha = parseDouble(alphaS, 0.2);
                 // Utiliser les valeurs par défaut pour les paramètres de convergence
-                config = new AlgorithmConfig(k, N, rho, maxIter, maxLen, alpha, 10);
+                // ⭐ CRÉER CONFIG AVEC PARAMÈTRES ADAPTATIFS
+                config = new AlgorithmConfig(
+                        k, N, rho, maxIter, maxLen,
+                        alpha, 5,
+                        enableAdaptive, minDiversity, reductionFactor, warmup);
             } else {
                 config = new AlgorithmConfig(k, N, rho, maxIter, maxLen);
             }

@@ -313,15 +313,6 @@ public class TKUSP_V2 implements Algorithm {
 
         }
 
-        // 3. Renormalize to ensure sum is 1.0
-        double sum = 0.0;
-        for (double p : newProbs)
-            sum += p;
-
-        for (int i = 0; i < maxLength; i++) {
-            newProbs[i] /= sum;
-        }
-
         return newProbs;
     }
 

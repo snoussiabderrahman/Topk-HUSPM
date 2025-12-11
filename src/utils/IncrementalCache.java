@@ -169,10 +169,11 @@ public class IncrementalCache {
                 count++;
             }
         }
-
+        /*
         if (count > 0) {
             System.out.printf("♻️  Invalidated %d cached projections\n", count);
         }
+         */
     }
 
     // ========== STATISTIQUES ==========
