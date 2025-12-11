@@ -12,6 +12,154 @@ public class CompactSequenceIndex {
     // ========== STRUCTURES PRINCIPALES ==========
 
     /**
+     * ⚡ CALCUL INITIAL : Trouve tous les matchs et retourne une ProjectedDatabase
+     *
+     * @param pattern    le pattern à matcher
+     * @param candidates BitSet des q-sequences candidates
+     * @return ProjectedDatabase avec tous les matchs
+     */
+    public ProjectedDatabase buildProjectedDatabase(Sequence pattern, BitSet candidates) {
+        ProjectedDatabase projected = new ProjectedDatabase(pattern);
+
+        for (int seqIdx = candidates.nextSetBit(0); seqIdx >= 0; seqIdx = candidates.nextSetBit(seqIdx + 1)) {
+
+            CompactSeq cs = compactDB[seqIdx];
+
+            // Trouver le meilleur match (glouton)
+            ProjectedDatabase.MatchInfo match = findBestMatch(pattern, cs, seqIdx);
+
+            if (match != null && match.utility > 0) {
+                projected.addMatch(match);
+            }
+        }
+
+        return projected;
+    }
+
+    /**
+     * ⚡ MATCHING AVEC RETOUR D'INFO
+     * Trouve le meilleur match et retourne les positions + utilité
+     */
+    private ProjectedDatabase.MatchInfo findBestMatch(Sequence pattern, CompactSeq cs, int seqIdx) {
+        int patternLength = pattern.length();
+        int[] positions = new int[patternLength];
+
+        long utility = 0;
+        int lastPos = -1;
+
+        // Matching glouton itemset par itemset
+        for (int i = 0; i < patternLength; i++) {
+            Itemset patternItemset = pattern.getItemsets().get(i);
+
+            long itemsetUtility = 0;
+            int matchedPos = -1;
+
+            // Chercher le meilleur match pour cet itemset
+            for (Item patternItem : patternItemset.getItems()) {
+                int itemId = patternItem.getId();
+                int[] itemPositions = cs.itemPositions.get(itemId);
+
+                if (itemPositions == null) {
+                    return null; // Item absent
+                }
+
+                // Chercher la première position valide après lastPos
+                for (int pos : itemPositions) {
+                    if (pos > lastPos) {
+                        // Vérifier contrainte I-concat / S-concat
+                        if (i == 0 || isValidExtension(cs, lastPos, pos, i > 0)) {
+                            itemsetUtility += cs.utilities[pos];
+                            matchedPos = Math.max(matchedPos, pos);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (matchedPos == -1) {
+                return null; // Pas de match pour cet itemset
+            }
+
+            positions[i] = matchedPos;
+            utility += itemsetUtility;
+            lastPos = matchedPos;
+        }
+
+        // Créer MatchInfo
+        ProjectedDatabase.MatchInfo match = new ProjectedDatabase.MatchInfo(seqIdx, positions);
+        match.utility = utility;
+        match.lastItemPosition = lastPos;
+
+        return match;
+    }
+
+    /**
+     * ⚡ EXTENSION D'UN MATCH EXISTANT
+     *
+     * Au lieu de recalculer depuis le début, on étend juste le dernier match
+     *
+     * @param existingMatch le match du préfixe
+     * @param newItemset    l'itemset à ajouter
+     * @param isSConcat     true pour S-concat, false pour I-concat
+     * @return nouveau match étendu, ou null si impossible
+     */
+    public ProjectedDatabase.MatchInfo extendMatch(
+            ProjectedDatabase.MatchInfo existingMatch,
+            Itemset newItemset,
+            boolean isSConcat) {
+
+        int seqIdx = existingMatch.seqIndex;
+        CompactSeq cs = compactDB[seqIdx];
+
+        int lastPos = existingMatch.lastItemPosition;
+
+        // Chercher le nouveau itemset après lastPos
+        long itemsetUtility = 0;
+        int matchedPos = -1;
+
+        for (Item item : newItemset.getItems()) {
+            int itemId = item.getId();
+            int[] positions = cs.itemPositions.get(itemId);
+
+            if (positions == null) {
+                return null; // Item absent
+            }
+
+            // Chercher première position valide
+            for (int pos : positions) {
+                if (pos > lastPos && isValidExtension(cs, lastPos, pos, isSConcat)) {
+                    itemsetUtility += cs.utilities[pos];
+                    matchedPos = Math.max(matchedPos, pos);
+                    break;
+                }
+            }
+        }
+
+        if (matchedPos == -1) {
+            return null; // Pas de match
+        }
+
+        // ⚡ CRÉER LE NOUVEAU MATCH (INCRÉMENTAL)
+        ProjectedDatabase.MatchInfo extended = existingMatch.extend(matchedPos);
+        extended.utility += itemsetUtility; // Ajouter l'utilité du nouvel itemset
+
+        return extended;
+    }
+
+    /**
+     * Vérifie si une position est valide pour l'extension
+     */
+    private boolean isValidExtension(CompactSeq cs, int lastPos, int newPos, boolean isSConcat) {
+        if (isSConcat) {
+            // S-concatenation : doit être dans un itemset ultérieur
+            return cs.whichItemset(newPos) > cs.whichItemset(lastPos);
+        } else {
+            // I-concatenation : peut être dans le même itemset
+            return cs.whichItemset(newPos) >= cs.whichItemset(lastPos);
+        }
+    }
+
+    /**
      * Pour chaque q-sequence, stocke :
      * - items[] : tableau d'items séquentiels
      * - utilities[] : tableau des utilités correspondantes
@@ -19,10 +167,10 @@ public class CompactSequenceIndex {
      * - itemIndex : Map<itemId, List<positions>>
      */
     private static class CompactSeq {
-        final int[] items;           // [a, b, f, a, d] (séquentiel)
-        final int[] utilities;       // [6, 2, 1, 3, 1]
-        final int[] remainUtility;   // [7, 5, 4, 1, 0] (somme à droite)
-        final BitSet itemsetStarts;  // positions de début d'itemset
+        final int[] items; // [a, b, f, a, d] (séquentiel)
+        final int[] utilities; // [6, 2, 1, 3, 1]
+        final int[] remainUtility; // [7, 5, 4, 1, 0] (somme à droite)
+        final BitSet itemsetStarts; // positions de début d'itemset
         final Map<Integer, int[]> itemPositions; // itemId -> [pos1, pos2, ...]
 
         CompactSeq(Sequence seq) {
@@ -108,8 +256,7 @@ public class CompactSequenceIndex {
     public long fastCalculateUtility(Sequence pattern, BitSet candidates) {
         long total = 0;
 
-        for (int seqIdx = candidates.nextSetBit(0); seqIdx >= 0;
-             seqIdx = candidates.nextSetBit(seqIdx + 1)) {
+        for (int seqIdx = candidates.nextSetBit(0); seqIdx >= 0; seqIdx = candidates.nextSetBit(seqIdx + 1)) {
 
             CompactSeq cs = compactDB[seqIdx];
 
@@ -136,7 +283,8 @@ public class CompactSequenceIndex {
             }
         }
 
-        // Matching glouton : pour chaque item du pattern, prendre la première occurrence après la précédente
+        // Matching glouton : pour chaque item du pattern, prendre la première
+        // occurrence après la précédente
         long utility = 0;
         int lastPos = -1;
 
@@ -199,8 +347,7 @@ public class CompactSequenceIndex {
     public long fastUpperBound(Sequence pattern, BitSet candidates) {
         long upperBound = 0;
 
-        for (int seqIdx = candidates.nextSetBit(0); seqIdx >= 0;
-             seqIdx = candidates.nextSetBit(seqIdx + 1)) {
+        for (int seqIdx = candidates.nextSetBit(0); seqIdx >= 0; seqIdx = candidates.nextSetBit(seqIdx + 1)) {
 
             CompactSeq cs = compactDB[seqIdx];
 

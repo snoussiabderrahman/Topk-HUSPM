@@ -39,6 +39,9 @@ public class TKUSP_V6 implements Algorithm {
         // ⭐ INITIALISER L'INDEX COMPACT AU DÉBUT
         UtilityCalculator.initializeCompactIndex(dataset);
 
+        // ⚡ ACTIVER LE MODE INCRÉMENTAL
+        UtilityCalculator.enableIncrementalMode();
+
         //System.out.println("\n=== Starting " + this.getClass().getSimpleName() + " Algorithm ===");
         //System.out.println(config);
 
@@ -203,6 +206,9 @@ public class TKUSP_V6 implements Algorithm {
 
             iteration++;
         }
+
+        // ⚡ AFFICHER LES STATISTIQUES À LA FIN
+        UtilityCalculator.printCacheStatistics();
 
         dataStructures.releasePerSequenceDistinctIds();
         long endTime = System.currentTimeMillis();
