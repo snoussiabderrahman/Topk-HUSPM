@@ -52,3 +52,7 @@ output_exacts/*
 
 ### JSON Version files ###
 filesJSON*
+
+### sources.txt ###
+sources.txt
+
