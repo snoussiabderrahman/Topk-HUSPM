@@ -88,7 +88,6 @@ public class TKUSP_V4 implements Algorithm {
         // Initialize sequence length probability uniformly
         lengthProbabilities = initializeLengthProbabilities(config.getMaxSequenceLength());
 
-        dataStructures.printStatistics();
         // --------------------------------------------------------------------------
         List<Sequence> elite = null; // elite from previous iteration for smooth factor
 

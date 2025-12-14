@@ -1,8 +1,6 @@
 package experiments;
 
-import algorithms.Algorithm;
-import algorithms.TKUSP;
-import algorithms.TKUSP_V1;
+import algorithms.*;
 import config.AlgorithmConfig;
 import model.Dataset;
 import model.Sequence;
@@ -12,129 +10,92 @@ import java.io.*;
 import java.util.*;
 
 /**
- * ExperimentRunner executes TKUSP with varying sample sizes (N)
- * and generates JSON files containing:
- * 1. Average utility for each N
- * 2. Accuracy compared to exact results for each N
+ * ExperimentRunner executes TKUSP with fixed sample size (N=2000)
+ * and varying k values, generating JSON files for:
+ * 1. Average utility (avgUtil.json)
+ * 2. Accuracy (acc.json)
+ * 3. Runtime (runtime.json)
  */
 public class ExperimentRunner {
 
-    private static final int[] SAMPLE_SIZES = { 200, 500,1000,2000,5000};
-    private static final int[] K_VALUES = { 10, 50,100,500,1000};
+    private static final int SAMPLE_SIZE = 2000;
+    private static final int[] K_VALUES = {10, 50,100,200,300,400,500};
     private static final double RHO = 0.3;
     private static final int MAX_ITERATIONS = 100;
     private static final int MAX_SEQUENCE_LENGTH = 10;
-    private static final String JSON_OUTPUT_DIR = "filesJSON";
+    private static final String JSON_OUTPUT_DIR = "filesJSON7";
 
     public static void main(String[] args) {
-        // Default values
-        String datasetPath = "data/BIBLE.txt";
+        // Datasets to process
+        String[] datasets = new String[] { "SIGN"};
 
-        // Override with command-line arguments if provided
-        if (args.length >= 1) {
-            datasetPath = args[0];
-        } else if (args.length == 0) {
-            System.out.println("No arguments provided, using default dataset:");
-            System.out.println("  Dataset: " + datasetPath);
-            System.out.println();
-        }
-
-        // Extract dataset name from path (e.g., "data/SIGN.txt" -> "SIGN")
-        String datasetName = extractDatasetName(datasetPath);
-
-        System.out.println("=== Experiment Runner ===");
-        System.out.println("Dataset: " + datasetName);
-        System.out.println("Sample sizes: " + Arrays.toString(SAMPLE_SIZES));
-        System.out.println("K values: " + Arrays.toString(K_VALUES));
-        System.out.println();
-
-        try {
-            // Load dataset once
-            System.out.println("Loading dataset from: " + datasetPath);
-            Dataset dataset = DatasetReader.readDataset(datasetPath);
-            System.out.println("Dataset loaded: " + dataset);
-            System.out.println();
-
-            for (int k : K_VALUES) {
-                System.out.println("\n--------------------------------------------------");
-                System.out.println("Starting experiments for k = " + k);
-                System.out.println("--------------------------------------------------");
-                runExperimentsForK(dataset, datasetName, k);
-            }
-
-        } catch (Exception e) {
-            System.err.println("Error running experiments: " + e.getMessage());
-            e.printStackTrace();
+        for (String datasetName : datasets) {
+            System.out.println("\n===============  " + datasetName + "  ===============");
+            runExperimentsForDataset(datasetName);
         }
     }
 
-    private static void runExperimentsForK(Dataset dataset, String datasetName, int k) throws IOException {
-        // Load exact patterns for accuracy comparison
-        String exactPatternsPath = "output_exacts/" + datasetName + "/" + datasetName + "_" + k + ".txt";
-        Set<String> exactPatterns = new HashSet<>();
-        File exactFile = new File(exactPatternsPath);
+    private static void runExperimentsForDataset(String datasetName) {
+        String datasetPath = "data/" + datasetName + ".txt";
 
-        if (exactFile.exists()) {
-            exactPatterns = parseExactPatterns(exactPatternsPath);
-            System.out.println("Loaded " + exactPatterns.size() + " exact patterns from: " + exactPatternsPath);
-        } else {
-            System.out.println("WARNING: Exact patterns file not found: " + exactPatternsPath);
-            System.out.println("Accuracy will be 0 for all runs.");
+        try {
+            // Load dataset
+            Dataset dataset = DatasetReader.readDataset(datasetPath);
+
+            // Store results
+            List<AvgUtilityResult> avgUtilityResults = new ArrayList<>();
+            List<AccuracyResult> accuracyResults = new ArrayList<>();
+            List<RuntimeResult> runtimeResults = new ArrayList<>();
+
+            for (int k : K_VALUES) {
+                System.out.println("--------------------------------------------------");
+                System.out.println("Running experiment for k = " + k);
+                System.out.println("--------------------------------------------------");
+
+                // Load exact patterns for accuracy comparison
+                String exactPatternsPath = "output_exacts/" + datasetName + "/" + datasetName + "_" + k + ".txt";
+                Set<String> exactPatterns = new HashSet<>();
+                File exactFile = new File(exactPatternsPath);
+
+                if (exactFile.exists()) {
+                    exactPatterns = parseExactPatterns(exactPatternsPath);
+                } else {
+                    System.out.println("WARNING: Exact patterns file not found: " + exactPatternsPath);
+                    System.out.println("Accuracy will be 0.");
+                }
+
+                // Run TKUSP
+                AlgorithmConfig config = new AlgorithmConfig(k, SAMPLE_SIZE, RHO, MAX_ITERATIONS, MAX_SEQUENCE_LENGTH);
+                Algorithm algorithm = new TKUSP_V7(42);
+                List<Sequence> topK = algorithm.run(dataset, config);
+
+                // Calculate metrics
+                double avgUtility = calculateAverageUtility(topK);
+                avgUtilityResults.add(new AvgUtilityResult(k, avgUtility));
+
+                int accuracy = calculateAccuracy(topK, exactPatterns);
+                accuracyResults.add(new AccuracyResult(k, accuracy));
+
+                double runtimeSeconds = algorithm.getRuntime() / 1000.0;
+                runtimeResults.add(new RuntimeResult(k, runtimeSeconds));
+            }
+
+            // Write JSON files
+            String baseDir = JSON_OUTPUT_DIR + "/" + datasetName;
+            createDirectoryIfNotExists(baseDir);
+
+            String avgUtilityFile = baseDir + "/avgUtil.json";
+            String accuracyFile = baseDir + "/acc.json";
+            String runtimeFile = baseDir + "/runtime.json";
+
+            writeAvgUtilityJSON(avgUtilityResults, avgUtilityFile);
+            writeAccuracyJSON(accuracyResults, accuracyFile);
+            writeRuntimeJSON(runtimeResults, runtimeFile);
+
+        } catch (Exception e) {
+            System.err.println("Error running experiments for " + datasetName + ": " + e.getMessage());
+            e.printStackTrace();
         }
-        System.out.println();
-
-        // Store results
-        List<AvgUtilityResult> avgUtilityResults = new ArrayList<>();
-        List<AccuracyResult> accuracyResults = new ArrayList<>();
-        List<RuntimeResult> runtimeResults = new ArrayList<>();
-
-        // Run TKUSP for each sample size
-        for (int N : SAMPLE_SIZES) {
-            System.out.println("Running TKUSP with N=" + N + ", k=" + k + "...");
-
-            // Note: Using 5-parameter constructor as per recent changes
-            AlgorithmConfig config = new AlgorithmConfig(k, N, RHO, MAX_ITERATIONS, MAX_SEQUENCE_LENGTH);
-
-            // Re-initialize algorithm for each run to ensure clean state
-            Algorithm algorithm = new TKUSP_V1(42); // Use TKUSP_V1 as requested
-            List<Sequence> topK = algorithm.run(dataset, config);
-
-            // Calculate average utility
-            double avgUtility = calculateAverageUtility(topK);
-            avgUtilityResults.add(new AvgUtilityResult(N, avgUtility));
-            System.out.println("  Average Utility: " + avgUtility);
-
-            // Calculate accuracy (number of common patterns)
-            int accuracy = calculateAccuracy(topK, exactPatterns);
-            accuracyResults.add(new AccuracyResult(N, accuracy));
-            System.out.println("  Accuracy (common patterns): " + accuracy);
-
-            // Get runtime in seconds
-            double runtimeSeconds = algorithm.getRuntime() / 1000.0;
-            runtimeResults.add(new RuntimeResult(N, runtimeSeconds));
-            System.out.printf("  Runtime: %.2f s%n", runtimeSeconds);
-            System.out.println();
-        }
-
-        // Create directory structure: filesJSON/<dataset>/{accuracy, runtime, avgUtil}
-        String baseDir = JSON_OUTPUT_DIR + "/" + datasetName;
-        createDirectoryIfNotExists(baseDir + "/accuracy");
-        createDirectoryIfNotExists(baseDir + "/runtime");
-        createDirectoryIfNotExists(baseDir + "/avgUtil");
-
-        // Write JSON files
-        String avgUtilityFile = baseDir + "/avgUtil/k_" + k + ".json";
-        String accuracyFile = baseDir + "/accuracy/k_" + k + ".json";
-        String runtimeFile = baseDir + "/runtime/k_" + k + ".json";
-
-        writeAvgUtilityJSON(avgUtilityResults, avgUtilityFile);
-        writeAccuracyJSON(accuracyResults, accuracyFile);
-        writeRuntimeJSON(runtimeResults, runtimeFile);
-
-        System.out.println("Results for k=" + k + " saved to:");
-        System.out.println("  - " + avgUtilityFile);
-        System.out.println("  - " + accuracyFile);
-        System.out.println("  - " + runtimeFile);
     }
 
     private static void createDirectoryIfNotExists(String path) {
@@ -245,7 +206,7 @@ public class ExperimentRunner {
             writer.println("[");
             for (int i = 0; i < results.size(); i++) {
                 AvgUtilityResult r = results.get(i);
-                writer.print("  {\"N\": " + r.N + ", \"avgUtility\": " + r.avgUtility + "}");
+                writer.print("  {\"k\": " + r.k + ", \"avgUtility\": " + r.avgUtility + "}");
                 if (i < results.size() - 1) {
                     writer.println(",");
                 } else {
@@ -264,7 +225,7 @@ public class ExperimentRunner {
             writer.println("[");
             for (int i = 0; i < results.size(); i++) {
                 AccuracyResult r = results.get(i);
-                writer.print("  {\"N\": " + r.N + ", \"accuracy\": " + r.accuracy + "}");
+                writer.print("  {\"k\": " + r.k + ", \"accuracy\": " + r.accuracy + "}");
                 if (i < results.size() - 1) {
                     writer.println(",");
                 } else {
@@ -283,7 +244,7 @@ public class ExperimentRunner {
             writer.println("[");
             for (int i = 0; i < results.size(); i++) {
                 RuntimeResult r = results.get(i);
-                writer.printf("  {\"N\": %d, \"runtime\": %.2f}", r.N, r.runtimeSeconds);
+                writer.printf("  {\"k\": %d, \"runtime\": %.2f}", r.k, r.runtimeSeconds);
                 if (i < results.size() - 1) {
                     writer.println(",");
                 } else {
@@ -294,47 +255,33 @@ public class ExperimentRunner {
         }
     }
 
-    /**
-     * Extract dataset name from file path.
-     * Example: "data/SIGN.txt" -> "SIGN"
-     */
-    private static String extractDatasetName(String path) {
-        File f = new File(path);
-        String name = f.getName();
-        int dotIndex = name.lastIndexOf('.');
-        if (dotIndex > 0) {
-            return name.substring(0, dotIndex);
-        }
-        return name;
-    }
-
     // Result data classes
     private static class AvgUtilityResult {
-        int N;
+        int k;
         double avgUtility;
 
-        AvgUtilityResult(int N, double avgUtility) {
-            this.N = N;
+        AvgUtilityResult(int k, double avgUtility) {
+            this.k = k;
             this.avgUtility = avgUtility;
         }
     }
 
     private static class AccuracyResult {
-        int N;
+        int k;
         int accuracy;
 
-        AccuracyResult(int N, int accuracy) {
-            this.N = N;
+        AccuracyResult(int k, int accuracy) {
+            this.k = k;
             this.accuracy = accuracy;
         }
     }
 
     private static class RuntimeResult {
-        int N;
+        int k;
         double runtimeSeconds;
 
-        RuntimeResult(int N, double runtimeSeconds) {
-            this.N = N;
+        RuntimeResult(int k, double runtimeSeconds) {
+            this.k = k;
             this.runtimeSeconds = runtimeSeconds;
         }
     }

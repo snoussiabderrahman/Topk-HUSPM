@@ -94,7 +94,7 @@ public class TKUSP_V7 implements Algorithm {
 
         // Initialize sequence length probability uniformly
         lengthProbabilities = initializeLengthProbabilities(config.getMaxSequenceLength());
-
+        //dataStructures.printStatistics();
         // --------------------------------------------------------------------------
         List<Sequence> elite = null; // elite from previous iteration for smooth factor
 
@@ -121,10 +121,13 @@ public class TKUSP_V7 implements Algorithm {
                     topK);
 
             // ===== CALCUL OPTIMISÉ DES UTILITÉS =====
+            //long runtime_calculeUtility_start = System.currentTimeMillis();
             for (Sequence seq : sample) {
                 long utility = UtilityCalculator.calculateSequenceUtility(seq, dataStructures);
                 seq.setUtility((int) utility);
             }
+            //long runtime_calculeUtility = System.currentTimeMillis() - runtime_calculeUtility_start;
+            //System.out.printf("\n runtime of calculateSequenceUtility = %f s",runtime_calculeUtility/1000.0);
             // =========================================
 
             // Trier par utilité décroissante
@@ -168,7 +171,6 @@ public class TKUSP_V7 implements Algorithm {
                 // calculer les items supprimés
                 Set<Integer> removed = new HashSet<>(oldItemsForPM);
                 removed.removeAll(items);
-
                 if (!removed.isEmpty()) {
                     // invalider seulement les entrées qui contiennent les items supprimés
                     UtilityCalculator.invalidateCacheForRemovedItems(removed);
@@ -181,9 +183,11 @@ public class TKUSP_V7 implements Algorithm {
                 // Filtrer l'élite pour retirer les items qui ne sont plus prometteurs
                 elite = filterEliteSequences(elite, items);
             }
-
+            //long runtime_updatePM_start = System.currentTimeMillis();
             // Mettre à jour la matrice de probabilité
-            PM = updateProbabilityMatrix(PM, elite, items, config);
+            PM = updateProbabilityMatrixOptimized(PM, elite, items, config);
+            //long runtime_updatePM = System.currentTimeMillis() - runtime_updatePM_start;
+            //System.out.printf("\n runtime of updateProbabilityMatrix = %f s",runtime_updatePM/1000.0);
 
             // Update sequence length probabilities based on elite statistics
             lengthProbabilities = updateLengthProbabilities(elite, config.getMaxSequenceLength(), config);
@@ -203,6 +207,12 @@ public class TKUSP_V7 implements Algorithm {
         long memoryAfter = runtime.totalMemory() - runtime.freeMemory();
         this.memoryUsage = (memoryAfter - memoryBefore) / (1024.0 * 1024.0);
 
+        System.out.println("=== Algorithm Completed ===");
+        //System.out.printf("Total iterations: %d\n", iteration - 1);
+        System.out.printf("Runtime: %.2f s\n", this.runtime / 1000.0);
+        System.out.printf("Memory: %.2f MB\n", this.memoryUsage);
+        System.out.println();
+        //UtilityCalculator.printCacheStatistics();
         return topK;
     }
 
@@ -749,6 +759,68 @@ public class TKUSP_V7 implements Algorithm {
         // ⚡ MARQUER CDF POUR MISE À JOUR
         cdfNeedsUpdate = true;
 
+        return newPM;
+    }
+
+    /**
+     * Remplace la version naïve : parcourt l'élite puis accroit des compteurs.
+     * Avantage : on évite de parcourir items × elite.
+     */
+    private double[][] updateProbabilityMatrixOptimized(double[][] PM,
+                                                        List<Sequence> elite,
+                                                        List<Integer> items,
+                                                        AlgorithmConfig config) {
+
+        if (elite == null || elite.isEmpty()) {
+            return PM; // rien à apprendre
+        }
+
+        final int numItems = items.size();
+        final int maxLen = PM[0].length;
+        final double alpha = config.getLearningRate();
+
+        // map itemId -> index dans "items"
+        Map<Integer, Integer> itemIndex = new HashMap<>(numItems);
+        for (int i = 0; i < numItems; i++) itemIndex.put(items.get(i), i);
+
+        // counts[itemIdx][pos] et totals[pos]
+        int[][] counts = new int[numItems][maxLen];
+        int[] totals = new int[maxLen];
+
+        // 1) Agrégation : parcourir l'élite (beaucoup plus petit que items)
+        for (Sequence seq : elite) {
+            int seqLen = Math.min(seq.length(), maxLen);
+            for (int pos = 0; pos < seqLen; pos++) {
+                totals[pos]++; // nombre de séquences de l'élite qui ont cette position
+                Itemset is = seq.getItemsets().get(pos);
+                for (model.Item it : is.getItems()) {
+                    Integer idx = itemIndex.get(it.getId());
+                    if (idx != null) counts[idx][pos]++;
+                }
+            }
+        }
+
+        // 2) Construire la nouvelle PM — on peut choisir de ne pas toucher les zéros
+        double[][] newPM = new double[numItems][maxLen];
+        for (int i = 0; i < numItems; i++) {
+            for (int p = 0; p < maxLen; p++) {
+                if (totals[p] > 0 && counts[i][p] > 0) {
+                    double prob = (double) counts[i][p] / totals[p];
+                    newPM[i][p] = (1.0 - alpha) * PM[i][p] + alpha * prob;
+                } else {
+                    // Option 1 (cheap) : ne pas toucher la cellule si l'item n'est jamais
+                    // apparu à cette position dans l'élite -> évite d'écrire toutes les
+                    // cellules zéro (gain important quand elite << items)
+                    //newPM[i][p] = PM[i][p];
+
+                    // Option 2 (si tu veux décroître lentement les items inactifs) :
+                    newPM[i][p] = (1.0 - alpha) * PM[i][p];
+                    //newPM[i][p] = alpha * PM[i][p];
+                }
+            }
+        }
+
+        cdfNeedsUpdate = true;
         return newPM;
     }
 

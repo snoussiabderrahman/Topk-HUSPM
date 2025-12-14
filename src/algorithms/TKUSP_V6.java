@@ -202,7 +202,7 @@ public class TKUSP_V6 implements Algorithm {
         }
 
         // ⚡ AFFICHER LES STATISTIQUES À LA FIN
-        UtilityCalculator.printCacheStatistics();
+        //UtilityCalculator.printCacheStatistics();
 
         dataStructures.releasePerSequenceDistinctIds();
         long endTime = System.currentTimeMillis();

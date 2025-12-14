@@ -29,9 +29,6 @@ public class TKUSP_V2 implements Algorithm {
         runtime.gc();
         long memoryBefore = runtime.totalMemory() - runtime.freeMemory();
 
-        System.out.println("\n=== Starting " + this.getClass().getSimpleName() + " Algorithm ===");
-        System.out.println(config);
-
         // 1) Statistiques dataset
         DatasetStatistics stats = new DatasetStatistics(dataset);
 
@@ -88,14 +85,13 @@ public class TKUSP_V2 implements Algorithm {
         // Initialize sequence length probability uniformly
         lengthProbabilities = initializeLengthProbabilities(config.getMaxSequenceLength());
 
-        dataStructures.printStatistics();
         // --------------------------------------------------------------------------
         List<Sequence> elite = null; // elite from previous iteration for smooth factor
 
         int iteration = 1;
 
         while (iteration <= config.getMaxIterations() && !isBinaryMatrix(PM)) {
-            System.out.printf("\n Iteration %d ", iteration);
+            //System.out.printf("\n Iteration %d ", iteration);
 
             // Calculate smooth factor from elite (use rho for first iteration)
             double smoothFactor = config.getRho();
