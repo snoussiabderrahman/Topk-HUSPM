@@ -49,3 +49,6 @@ filesJSON/*
 ### Exact patterns ###
 output_exacts/*
 !output_exacts/.gitkeep
+
+### JSON Version files ###
+filesJSON*
