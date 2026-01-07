@@ -90,7 +90,7 @@ public class Main {
             // Extract dataset name from path
             String datasetName = new File(datasetPath).getName().replace(".txt", "");
 
-            System.out.println("======== DB : " + datasetName + " ========");
+            System.out.println("\n======== DB : " + datasetName + " ========");
             System.out.println("✅ k = " + config.getK());
             System.out.printf("Runtime = %.2f s\n", algorithm.getRuntime() / 1000.0);
             System.out.printf("memory = %.2f MB\n", algorithm.getMemoryUsage());

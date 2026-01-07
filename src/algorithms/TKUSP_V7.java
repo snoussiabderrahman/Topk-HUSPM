@@ -36,7 +36,7 @@ public class TKUSP_V7 implements Algorithm {
         runtime.gc();
         long memoryBefore = runtime.totalMemory() - runtime.freeMemory();
 
-        // ⭐ INITIALISER L'INDEX COMPACT AU DÉBUT
+        // INITIALISER L'INDEX COMPACT AU DÉBUT
         UtilityCalculator.initializeCompactIndex(dataset);
 
         // 1) Statistiques dataset
@@ -68,25 +68,21 @@ public class TKUSP_V7 implements Algorithm {
             topK.add(s);
         }
 
-        // 7) initialiser currentMinUtil avec la k-ème utilité (ou la plus petite si
-        // moins de k)
+        // 7) initialiser currentMinUtil avec la k-ème utilité (ou la plus petite si moins de k)
         if (singleList.size() >= config.getK()) {
             currentMinUtil = singleList.get(config.getK() - 1).getValue();
         } else if (!singleList.isEmpty())
             currentMinUtil = singleList.get(singleList.size() - 1).getValue();
 
-        // 8) Pruner les items : reconstruire promising items / index en utilisant
-        // currentMinUtil
+        // 8) Pruner les items : reconstruire promising items / index en utilisant currentMinUtil
         dataStructures.updatePromisingItems(currentMinUtil);
         // réduire le cache par-sequence en supprimant les ids non-prometteurs
         dataStructures.releaseNonPromisingDistinctIds();
 
-        // Vider les caches d'utilité (les patterns précédemment calculés peuvent ne
-        // plus être pertinents)
+        // Vider les caches d'utilité (les patterns précédemment calculés peuvent ne plus être pertinents)
         UtilityCalculator.clearCache();
 
-        // 9) reconstruire la liste active d'items et initialiser PM sur les items
-        // prometteurs
+        // 9) reconstruire la liste active d'items et initialiser PM sur les items prometteurs
         items = dataStructures.getPromisingItems();
         double[][] PM = initializeProbabilityMatrix(
                 items.size(),
@@ -94,7 +90,7 @@ public class TKUSP_V7 implements Algorithm {
 
         // Initialize sequence length probability uniformly
         lengthProbabilities = initializeLengthProbabilities(config.getMaxSequenceLength());
-        //dataStructures.printStatistics();
+
         // --------------------------------------------------------------------------
         List<Sequence> elite = null; // elite from previous iteration for smooth factor
 
@@ -120,15 +116,11 @@ public class TKUSP_V7 implements Algorithm {
                     elite,
                     topK);
 
-            // ===== CALCUL OPTIMISÉ DES UTILITÉS =====
-            //long runtime_calculeUtility_start = System.currentTimeMillis();
+            //  Calcule d'utilité
             for (Sequence seq : sample) {
                 long utility = UtilityCalculator.calculateSequenceUtility(seq, dataStructures);
                 seq.setUtility((int) utility);
             }
-            //long runtime_calculeUtility = System.currentTimeMillis() - runtime_calculeUtility_start;
-            //System.out.printf("\n runtime of calculateSequenceUtility = %f s",runtime_calculeUtility/1000.0);
-            // =========================================
 
             // Trier par utilité décroissante
             sample.sort((s1, s2) -> Integer.compare(s2.getUtility(), s1.getUtility()));
@@ -149,8 +141,6 @@ public class TKUSP_V7 implements Algorithm {
             }
 
             if (newMinUtilFromTopK > currentMinUtil) {
-                // System.out.printf("TopK increased minUtil: %d -> %d\n", currentMinUtil,
-                // newMinUtilFromTopK);
                 currentMinUtil = newMinUtilFromTopK;
 
                 // sauvegarder ancien mapping items -> PM (ou juste les items)
@@ -160,7 +150,7 @@ public class TKUSP_V7 implements Algorithm {
                 // pruning
                 dataStructures.updatePromisingItems(currentMinUtil);
 
-                // ⚡ PRUNING DANS PM
+                // PRUNING DANS PM
                 pruneNonPromisingItemsInPM(PM, items, dataStructures, currentMinUtil);
 
                 dataStructures.releaseNonPromisingDistinctIds();
@@ -183,11 +173,9 @@ public class TKUSP_V7 implements Algorithm {
                 // Filtrer l'élite pour retirer les items qui ne sont plus prometteurs
                 elite = filterEliteSequences(elite, items);
             }
-            //long runtime_updatePM_start = System.currentTimeMillis();
+
             // Mettre à jour la matrice de probabilité
-            PM = updateProbabilityMatrixOptimized(PM, elite, items, config);
-            //long runtime_updatePM = System.currentTimeMillis() - runtime_updatePM_start;
-            //System.out.printf("\n runtime of updateProbabilityMatrix = %f s",runtime_updatePM/1000.0);
+            PM = updateProbabilityMatrix(PM, elite, items, config);
 
             // Update sequence length probabilities based on elite statistics
             lengthProbabilities = updateLengthProbabilities(elite, config.getMaxSequenceLength(), config);
@@ -207,12 +195,14 @@ public class TKUSP_V7 implements Algorithm {
         long memoryAfter = runtime.totalMemory() - runtime.freeMemory();
         this.memoryUsage = (memoryAfter - memoryBefore) / (1024.0 * 1024.0);
 
+        /*
         System.out.println("=== Algorithm Completed ===");
         //System.out.printf("Total iterations: %d\n", iteration - 1);
         System.out.printf("Runtime: %.2f s\n", this.runtime / 1000.0);
         System.out.printf("Memory: %.2f MB\n", this.memoryUsage);
         System.out.println();
         //UtilityCalculator.printCacheStatistics();
+         */
         return topK;
     }
 
@@ -322,8 +312,7 @@ public class TKUSP_V7 implements Algorithm {
                     + config.getLearningRate() * frequency;
 
             // 2. Apply Minimum Probability Bound
-            // Ensure at least minProbability (or a small fraction like 0.01) for each
-            // length
+            // Ensure at least minProbability (or a small fraction like 0.01) for each length
             //double minLenProb = Math.max(config.getMinProbability(), 0.01);
             newProbs[i] = Math.max(0.05, newProbs[i]);
         }
@@ -372,7 +361,7 @@ public class TKUSP_V7 implements Algorithm {
 
     /**
      * Calculate smooth factor α based on elite diversity.
-     * α = [(u_best − u_quantile) / u_best] × ρ
+     * smoothFactor = [(u_best − u_quantile) / u_best] × ρ
      */
     private double calculateSmoothFactor(List<Sequence> elite, double rho) {
         if (elite == null || elite.isEmpty())
@@ -389,8 +378,8 @@ public class TKUSP_V7 implements Algorithm {
         if (uBest == 0)
             return rho; // avoid division by zero
 
-        double alpha = ((double) (uBest - uQuantile) / uBest) * rho;
-        return Math.max(0.0, Math.min(alpha, 1.0)); // clamp to [0,1]
+        double smoothFactor = ((double) (uBest - uQuantile) / uBest) * rho;
+        return Math.max(0.0, Math.min(smoothFactor, 1.0)); // clamp to [0,1]
     }
 
     /**
@@ -465,7 +454,7 @@ public class TKUSP_V7 implements Algorithm {
 
             for (int pos = 0; pos < seqLength; pos++) {
                 // Générer un itemset pour cette position
-                Itemset itemset = generateItemsetOptimized(PM, items, pos, stats);
+                Itemset itemset = generateItemset(PM, items, pos, stats);
 
                 if (!itemset.isEmpty()) {
                     sequence.addItemset(itemset);
@@ -582,70 +571,6 @@ public class TKUSP_V7 implements Algorithm {
         return fused;
     }
 
-    private Itemset generateItemset(double[][] PM, List<Integer> items, int position, DatasetStatistics stats) {
-        List<Item> chosenItems = new ArrayList<>();
-
-        // Construire d'abord la liste des candidats (comme avant)
-        for (int itemIdx = 0; itemIdx < items.size(); itemIdx++) {
-            if (random.nextDouble() < PM[itemIdx][position]) {
-                int itemId = items.get(itemIdx);
-                chosenItems.add(new Item(itemId));
-            }
-        }
-
-        int maxElemSize = stats.sampleItemsetSize(random);
-        if (maxElemSize <= 0)
-            maxElemSize = 1;
-
-        // Si plus de candidats que k, faire un Fisher-Yates PARTIEL :
-        // pour i in [0..k-1] swap chosenItems[i] avec chosenItems[i + rnd(0..n-i-1)]
-        if (chosenItems.size() > maxElemSize) {
-            int n = chosenItems.size();
-            for (int i = 0; i < maxElemSize; i++) {
-                int j = i + random.nextInt(n - i); // j in [i, n-1]
-                // swap elements i et j
-                Item tmp = chosenItems.get(i);
-                chosenItems.set(i, chosenItems.get(j));
-                chosenItems.set(j, tmp);
-            }
-            // Gagner du temps : on ne fait que k swaps (au lieu de n swaps d'un shuffle
-            // complet)
-            chosenItems = chosenItems.subList(0, maxElemSize);
-        }
-
-        // Fallback si aucun item choisi
-        if (chosenItems.isEmpty()) {
-            chosenItems.add(fallbackItem(PM, items, position));
-        }
-        // System.out.printf(" size itemset = %d ",chosenItems.size());
-
-        return new Itemset(chosenItems);
-    }
-
-    private Item fallbackItem(double[][] PM, List<Integer> items, int position) {
-        double sum = 0.0;
-        for (int i = 0; i < items.size(); i++) {
-            sum += PM[i][position];
-        }
-
-        if (sum == 0.0) {
-            int itemId = items.get(random.nextInt(items.size()));
-            return new Item(itemId);
-        }
-
-        double r = random.nextDouble() * sum;
-        double cumulative = 0.0;
-
-        for (int i = 0; i < items.size(); i++) {
-            cumulative += PM[i][position];
-            if (cumulative >= r) {
-                return new Item(items.get(i));
-            }
-        }
-
-        return new Item(items.get(0));
-    }
-
     private List<Sequence> updateTopK(List<Sequence> currentTopK, List<Sequence> sample, int k) {
 
         // Min-heap : la plus petite utilité est en tête
@@ -719,54 +644,11 @@ public class TKUSP_V7 implements Algorithm {
         return filteredElite;
     }
 
-    private double[][] updateProbabilityMatrix(double[][] PM, List<Sequence> elite, List<Integer> items,
-                                               AlgorithmConfig config) {
-        double[][] newPM = new double[PM.length][PM[0].length];
-
-        for (int itemIdx = 0; itemIdx < items.size(); itemIdx++) {
-            int itemId = items.get(itemIdx);
-
-            for (int pos = 0; pos < PM[0].length; pos++) {
-                int count = 0;
-                int total = 0;
-
-                for (Sequence seq : elite) {
-                    if (pos < seq.length()) {
-                        total++;
-                        Itemset itemset = seq.getItemsets().get(pos);
-
-                        // Vérifier si l'item est dans cet itemset
-                        boolean containsItem = itemset.getItems().stream()
-                                .anyMatch(item -> item.getId() == itemId);
-
-                        if (containsItem) {
-                            count++;
-                        }
-                    }
-                }
-
-                // Calculer la nouvelle probabilité
-                double probability = (total > 0) ? (double) count / total : PM[itemIdx][pos];
-
-                // 1. Application du Learning Rate (Alpha)
-                double newProb = (1.0 - config.getLearningRate()) * PM[itemIdx][pos]
-                        + config.getLearningRate() * probability;
-
-                newPM[itemIdx][pos] = newProb;
-            }
-        }
-
-        // ⚡ MARQUER CDF POUR MISE À JOUR
-        cdfNeedsUpdate = true;
-
-        return newPM;
-    }
-
     /**
      * Remplace la version naïve : parcourt l'élite puis accroit des compteurs.
      * Avantage : on évite de parcourir items × elite.
      */
-    private double[][] updateProbabilityMatrixOptimized(double[][] PM,
+    private double[][] updateProbabilityMatrix(double[][] PM,
                                                         List<Sequence> elite,
                                                         List<Integer> items,
                                                         AlgorithmConfig config) {
@@ -853,10 +735,10 @@ public class TKUSP_V7 implements Algorithm {
      *
      * COMPLEXITÉ : O(k × log(|items|)) au lieu de O(|items|)
      */
-    private Itemset generateItemsetOptimized(double[][] PM, List<Integer> items,
+    private Itemset generateItemset(double[][] PM, List<Integer> items,
                                              int position, DatasetStatistics stats) {
 
-        // ⚡ PRÉCALCUL CDF SI NÉCESSAIRE
+        // PRÉCALCUL CDF SI NÉCESSAIRE
         if (cdfNeedsUpdate) {
             updateCumulativePM(PM);
         }
@@ -868,7 +750,7 @@ public class TKUSP_V7 implements Algorithm {
         List<Item> chosenItems = new ArrayList<>();
         Set<Integer> alreadyChosen = new HashSet<>();
 
-        // ⚡ GÉNÉRATION AVEC RECHERCHE BINAIRE (O(log n) par item)
+        // GÉNÉRATION AVEC RECHERCHE BINAIRE (O(log n) par item)
         double totalProb = cumulativePM[position][items.size() - 1];
 
         int attempts = 0;
@@ -878,21 +760,13 @@ public class TKUSP_V7 implements Algorithm {
             // Tirer un nombre aléatoire [0, totalProb]
             double r = random.nextDouble() * totalProb;
 
-            // ⚡ RECHERCHE BINAIRE dans le CDF
+            // RECHERCHE BINAIRE dans le CDF
             int itemIdx = binarySearchCDF(cumulativePM[position], r, items.size());
+            int itemId = items.get(itemIdx);
 
-            if (itemIdx >= 0 && itemIdx < items.size()) {
-                int itemId = items.get(itemIdx);
-
-                if (alreadyChosen.add(itemId)) { // Éviter doublons
-                    chosenItems.add(new Item(itemId));
-                }
+            if (alreadyChosen.add(itemId)) { // Éviter doublons
+                chosenItems.add(new Item(itemId));
             }
-        }
-
-        // Fallback si aucun item sélectionné
-        if (chosenItems.isEmpty()) {
-            chosenItems.add(fallbackItem(PM, items, position));
         }
 
         return new Itemset(chosenItems);
@@ -927,10 +801,6 @@ public class TKUSP_V7 implements Algorithm {
     private void pruneNonPromisingItemsInPM(double[][] PM, List<Integer> items,
                                             OptimizedDataStructures dataStructures,
                                             long currentMinUtil) {
-
-        //System.out.println("🔍 Pruning non-promising items in PM (IIP strategy)...");
-        int prunedCount = 0;
-
         for (int itemIdx = 0; itemIdx < items.size(); itemIdx++) {
             int itemId = items.get(itemIdx);
             long swu = dataStructures.getSWU(itemId);
@@ -939,13 +809,10 @@ public class TKUSP_V7 implements Algorithm {
             if (swu < currentMinUtil) {
                 // Mettre toutes les probabilités à 0
                 Arrays.fill(PM[itemIdx], 0.0);
-                prunedCount++;
             }
         }
 
-        //System.out.printf("✂️ Pruned %d / %d items (%.1f%%)\n", prunedCount, items.size(), 100.0 * prunedCount / items.size());
-
-        // ⚡ MARQUER CDF POUR MISE À JOUR
+        // MARQUER CDF POUR MISE À JOUR
         cdfNeedsUpdate = true;
     }
 
