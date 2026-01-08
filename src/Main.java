@@ -64,7 +64,7 @@ public class Main {
                 }
             } else {
                 // par défaut
-                algoClass = "TKUSP_V7";
+                algoClass = "TKUS_CE";
             }
 
             // Construire la configuration

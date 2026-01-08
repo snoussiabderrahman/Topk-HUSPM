@@ -15,19 +15,20 @@ import java.util.*;
  * 1. Average utility (avgUtil.json)
  * 2. Accuracy (acc.json)
  * 3. Runtime (runtime.json)
+ * 4. Memory consumption (memory.json)
  */
 public class ExperimentRunner {
 
     private static final int SAMPLE_SIZE = 2000;
-    private static final int[] K_VALUES = { 1000 };
+    private static final int[] K_VALUES = { 10, 50,100,200,300,400,500 };
     private static final double RHO = 0.3;
     private static final int MAX_ITERATIONS = 100;
     private static final int MAX_SEQUENCE_LENGTH = 10;
-    private static final String JSON_OUTPUT_DIR = "filesJSON7";
+    private static final String JSON_OUTPUT_DIR = "filesJSON";
 
     public static void main(String[] args) {
         // Datasets to process
-        String[] datasets = new String[] { "SIGN" };
+        String[] datasets = new String[] { "SIGN", "BIBLE","Yoochoose", "Scalability_10K", "Scalability_80K", "Leviathan", "BMS" };
 
         for (String datasetName : datasets) {
             System.out.println("\n===============  " + datasetName + "  ===============");
@@ -47,11 +48,13 @@ public class ExperimentRunner {
             List<AvgUtilityResult> avgUtilityResults = new ArrayList<>();
             List<AccuracyResult> accuracyResults = new ArrayList<>();
             List<RuntimeResult> runtimeResults = new ArrayList<>();
+            List<MemoryResult> memoryResults = new ArrayList<>();
 
             try {
                 avgUtilityResults = loadAllAvgUtilityResults(baseDir + "/avgUtil.json");
                 accuracyResults = loadAllAccuracyResults(baseDir + "/acc.json");
                 runtimeResults = loadAllRuntimeResults(baseDir + "/runtime.json");
+                memoryResults = loadAllMemoryResults(baseDir + "/memory.json");
 
                 if (!avgUtilityResults.isEmpty()) {
                     System.out.println("Loaded " + avgUtilityResults.size() + " existing results from JSON files.");
@@ -60,10 +63,23 @@ public class ExperimentRunner {
                 System.out.println("No existing results found. Starting fresh.");
             }
 
-            // Create sets to track which k values we already have
-            Set<Integer> existingKValues = new HashSet<>();
+            // Create sets to track which k values we already have for ALL metrics
+            Set<Integer> existingAvgUtilityK = new HashSet<>();
+            Set<Integer> existingAccuracyK = new HashSet<>();
+            Set<Integer> existingRuntimeK = new HashSet<>();
+            Set<Integer> existingMemoryK = new HashSet<>();
+
             for (AvgUtilityResult r : avgUtilityResults) {
-                existingKValues.add(r.k);
+                existingAvgUtilityK.add(r.k);
+            }
+            for (AccuracyResult r : accuracyResults) {
+                existingAccuracyK.add(r.k);
+            }
+            for (RuntimeResult r : runtimeResults) {
+                existingRuntimeK.add(r.k);
+            }
+            for (MemoryResult r : memoryResults) {
+                existingMemoryK.add(r.k);
             }
 
             for (int k : K_VALUES) {
@@ -71,8 +87,13 @@ public class ExperimentRunner {
                 System.out.println("Running experiment for k = " + k);
                 System.out.println("--------------------------------------------------");
 
-                // Check if results already exist for this k value
-                if (existingKValues.contains(k)) {
+                // Check if results already exist for this k value in ALL metrics
+                boolean allResultsExist = existingAvgUtilityK.contains(k) &&
+                        existingAccuracyK.contains(k) &&
+                        existingRuntimeK.contains(k) &&
+                        existingMemoryK.contains(k);
+
+                if (allResultsExist) {
                     System.out.println("✓ Results already exist for " + datasetName + " with k=" + k + ". Skipping...");
                     continue; // Skip to next k value
                 } else {
@@ -94,31 +115,35 @@ public class ExperimentRunner {
 
                 // Run TKUSP
                 AlgorithmConfig config = new AlgorithmConfig(k, SAMPLE_SIZE, RHO, MAX_ITERATIONS, MAX_SEQUENCE_LENGTH);
-                Algorithm algorithm = new TKUSP_V7(42);
+                Algorithm algorithm = new TKUS_CE(42);
                 List<Sequence> topK = algorithm.run(dataset, config);
 
                 // Calculate metrics
                 double avgUtility = calculateAverageUtility(topK);
                 int accuracy = calculateAccuracy(topK, exactPatterns);
                 double runtimeSeconds = algorithm.getRuntime() / 1000.0;
+                double memoryMB = algorithm.getMemoryUsage();
 
                 // Add new results (or replace if k already existed)
                 avgUtilityResults.removeIf(r -> r.k == k);
                 accuracyResults.removeIf(r -> r.k == k);
                 runtimeResults.removeIf(r -> r.k == k);
+                memoryResults.removeIf(r -> r.k == k);
 
                 avgUtilityResults.add(new AvgUtilityResult(k, avgUtility));
                 accuracyResults.add(new AccuracyResult(k, accuracy));
                 runtimeResults.add(new RuntimeResult(k, runtimeSeconds));
+                memoryResults.add(new MemoryResult(k, memoryMB));
 
                 System.out.println("  Calculated: avgUtility=" + avgUtility + ", accuracy=" + accuracy + ", runtime="
-                        + runtimeSeconds + "s");
+                        + runtimeSeconds + "s, memory=" + memoryMB + "MB");
             }
 
             // Sort results by k value before writing to ensure consistent ordering
             avgUtilityResults.sort(Comparator.comparingInt(r -> r.k));
             accuracyResults.sort(Comparator.comparingInt(r -> r.k));
             runtimeResults.sort(Comparator.comparingInt(r -> r.k));
+            memoryResults.sort(Comparator.comparingInt(r -> r.k));
 
             // Write JSON files
             createDirectoryIfNotExists(baseDir);
@@ -126,10 +151,12 @@ public class ExperimentRunner {
             String avgUtilityFile = baseDir + "/avgUtil.json";
             String accuracyFile = baseDir + "/acc.json";
             String runtimeFile = baseDir + "/runtime.json";
+            String memoryFile = baseDir + "/memory.json";
 
             writeAvgUtilityJSON(avgUtilityResults, avgUtilityFile);
             writeAccuracyJSON(accuracyResults, accuracyFile);
             writeRuntimeJSON(runtimeResults, runtimeFile);
+            writeMemoryJSON(memoryResults, memoryFile);
 
         } catch (Exception e) {
             System.err.println("Error running experiments for " + datasetName + ": " + e.getMessage());
@@ -239,6 +266,40 @@ public class ExperimentRunner {
                         double runtime = Double.parseDouble(runtimePart);
 
                         results.add(new RuntimeResult(k, runtime));
+                    }
+                }
+            }
+        }
+        return results;
+    }
+
+    /**
+     * Load ALL existing memory results from JSON file.
+     */
+    private static List<MemoryResult> loadAllMemoryResults(String filename) throws IOException {
+        List<MemoryResult> results = new ArrayList<>();
+        if (!new File(filename).exists()) {
+            return results;
+        }
+
+        try (BufferedReader br = new BufferedReader(new FileReader(filename))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.contains("\"k\":")) {
+                    // Extract k and memory
+                    int kIdx = line.indexOf("\"k\":");
+                    int memoryIdx = line.indexOf("\"memory\":");
+
+                    if (kIdx != -1 && memoryIdx != -1) {
+                        String kPart = line.substring(kIdx + 4).trim();
+                        kPart = kPart.substring(0, kPart.indexOf(',')).trim();
+                        int k = Integer.parseInt(kPart);
+
+                        String memoryPart = line.substring(memoryIdx + 9).trim();
+                        memoryPart = memoryPart.replaceAll("[},]", "").trim();
+                        double memory = Double.parseDouble(memoryPart);
+
+                        results.add(new MemoryResult(k, memory));
                     }
                 }
             }
@@ -396,6 +457,25 @@ public class ExperimentRunner {
         }
     }
 
+    /**
+     * Write memory results to JSON file.
+     */
+    private static void writeMemoryJSON(List<MemoryResult> results, String filename) throws IOException {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(filename))) {
+            writer.println("[");
+            for (int i = 0; i < results.size(); i++) {
+                MemoryResult r = results.get(i);
+                writer.printf("  {\"k\": %d, \"memory\": %.2f}", r.k, r.memoryMB);
+                if (i < results.size() - 1) {
+                    writer.println(",");
+                } else {
+                    writer.println();
+                }
+            }
+            writer.println("]");
+        }
+    }
+
     // Result data classes
     private static class AvgUtilityResult {
         int k;
@@ -424,6 +504,16 @@ public class ExperimentRunner {
         RuntimeResult(int k, double runtimeSeconds) {
             this.k = k;
             this.runtimeSeconds = runtimeSeconds;
+        }
+    }
+
+    private static class MemoryResult {
+        int k;
+        double memoryMB;
+
+        MemoryResult(int k, double memoryMB) {
+            this.k = k;
+            this.memoryMB = memoryMB;
         }
     }
 }
